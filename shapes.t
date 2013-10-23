@@ -11,6 +11,9 @@ local ImplicitShape = templatize(function(real, spaceDim, surfeDim)
 
 	local struct ImplicitShapeT {}
 
+	terra ImplicitShapeT:__destruct() end
+	inheritance.virtual(ImplicitShapeT, "__destruct")
+
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalueAndSurfaceCoord", {SpaceVec}->{real, SurfVec})
 
@@ -18,26 +21,29 @@ local ImplicitShape = templatize(function(real, spaceDim, surfeDim)
 
 end)
 
-local ShadedImplicitShape = templatize(function(real, spaceDim, surfDim, colorDim)
+local ColoredImplicitShape = templatize(function(real, spaceDim, surfDim, colorDim)
 
 	local SpaceVec = Vec(real, spaceDim)
 	local SurfVec = Vec(real, surfDim)
 	local ColorVec = Vec(real, colorDim)
 	local ImplicitShapeT = ImplicitShape(real, spaceDim, surfDim)
 
-	local struct ShadedImplicitShapeT
+	local struct ColoredImplicitShapeT
 	{
 		baseShape: &ImplicitShapeT
 	}
 
-	terra ShadedImplicitShapeT:__construct(baseShape: &ImplicitShapeT)
+	terra ColoredImplicitShapeT:__construct(baseShape: &ImplicitShapeT)
 		self.baseShape = baseShape
 	end
 
-	inheritance.purevirtual(ShadedImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
+	terra ColoredImplicitShapeT:__destruct() end
+	inheritance.virtual(ColoredImplicitShapeT, "__destruct")
 
-	m.addConstructors(ShadedImplicitShapeT)
-	return ShadedImplicitShapeT
+	inheritance.purevirtual(ColoredImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
+
+	m.addConstructors(ColoredImplicitShapeT)
+	return ColoredImplicitShapeT
 
 end)
 
@@ -47,23 +53,24 @@ local ConstantColorImplicitShape = templatize(function(real, spaceDim, surfDim, 
 	local SurfVec = Vec(real, surfDim)
 	local ColorVec = Vec(real, colorDim)
 	local ImplicitShapeT = ImplicitShape(real, spaceDim, surfDim)
-	local ShadedImplicitShapeT = ShadedImplicitShape(real, spaceDim, surfDim, colorDim)
+	local ColoredImplicitShapeT = ShadedImplicitShape(real, spaceDim, surfDim, colorDim)
 
 	local struct ConstantColorImplicitShapeT
 	{
 		color: ColorVec
 	}
-	inheritance.dynamicExtend(ShadedImplicitShapeT, ConstantColorImplicitShapeT)
+	inheritance.dynamicExtend(ColoredImplicitShapeT, ConstantColorImplicitShapeT)
 
 	-- Assumes ownership of 'color'
 	terra ConstantColorImplicitShapeT:__construct(baseShape: &ImplicitShapeT, color: ColorVec)
-		ShadedImplicitShapeT.__construct(self, baseShape)
+		ColoredImplicitShapeT.__construct(self, baseShape)
 		self.color = color
 	end
 
 	terra ConstantColorImplicitShapeT:__destruct()
 		m.destruct(self.color)
 	end
+	inheritance.virtual(ConstantColorImplicitShapeT, "__destruct")
 
 	terra ConstantColorImplicitShapeT:isovalueAndColor(point: SpaceVec)
 		return self.color
@@ -79,6 +86,6 @@ end)
 return
 {
 	ImplicitShape = ImplicitShape,
-	ShadedImplicitShape = ShadedImplicitShape,
+	ColoredImplicitShape = ColoredImplicitShape,
 	ConstantColorImplicitShape = ConstantColorImplicitShape
 }
