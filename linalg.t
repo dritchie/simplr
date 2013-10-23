@@ -1,0 +1,156 @@
+local templatize = terralib.require("templatize")
+local m = terralib.require("mem")
+local util = terralib.require("util")
+local ad = terralib.require("ad")
+
+local Vec = templatize(function(real, dim)
+
+	local struct VecT
+	{
+		entries: real[dim]
+	}
+
+	-- Code gen helpers
+	local function entryList(self)
+		local t = {}
+		for i=1,dim do table.insert(t, `[self].entries[i]) end
+		return t
+	end
+	local function replicate(val, n)
+		local t = {}
+		for i=1,n do table.insert(t, val) end
+		return t
+	end
+	local function symbolList()
+		local t = {}
+		for i=1,dim do table.insert(t, symbol(real)) end
+		return t
+	end
+	local function wrap(exprs, unaryFn)
+		local t = {}
+		for _,e in ipairs(exprs) do table.insert(t, `[unaryFn(e)]) end
+		return t
+	end
+	local function copyWrap(exprs)
+		return wrap(exprs, function(e) return `m.copy(e) end)
+	end
+	local function destructWrap(exprs)
+		return wrap(exprs, function(e) return `m.destruct(e) end)
+	end
+	local function zip(expList1, expList2, binaryFn)
+		assert(#expList1 == #expList2)
+		local t = {}
+		for i=1,#expList1 do
+			local e1 = expList1[i]
+			local e2 = expList2[i]
+			table.insert(t, `[binaryFn(e1, e2)])
+		end
+		return t
+	end
+	local function reduce(exprs, accumFn)
+		local curr = exprs[1]
+		for i=2,#exprs do
+			local e = exprs[i]
+			curr = `[accumFn(e, curr)]
+		end
+		return curr
+	end
+
+	-- Constructors/destructors/etc.
+	terra VecT:__construct()
+		[entryList(self)] = [replicate(0.0, dim)]
+	end
+	local ctorags = symbolList()
+	terra VecT:__construct([ctorags])
+		[entryList(self)] = [copyWrap(ctorags)]
+	end
+	terra VecT:__destruct()
+		[destructWrap(entryList(self))]
+	end
+	terra VecT:__copy(other: &VecT)
+		[entryList(self)] = [copyWrap(entryList(other))]
+	end
+
+	-- Arithmetic operators
+	VecT.metamethods.__add = terra(v1: VecT, v2: VecT)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), entryList(v2),
+			function(a, b) return `a+b end)]
+		return v
+	end
+	util.inline(VecT.metamethods.__add)
+	VecT.metamethods.__sub = terra(v1: VecT, v2: VecT)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), entryList(v2),
+			function(a, b) return `a-b end)]
+		return v
+	end
+	util.inline(VecT.metamethods.__sub)
+	VecT.metamethods.__mul = terra(v1: VecT, s: real)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+			function(a, b) return `a*b end)]
+		return v
+	end
+	VecT.metamethods.__mul:adddefinition(terra(s: real, v1: VecT)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+			function(a, b) return `a*b end)]
+		return v
+	end)
+	util.inline(VecT.metamethods.__mul)
+	VecT.metamethods.__div = terra(v1: VecT, s: real)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+			function(a, b) return `a/b end)]
+		return v
+	end
+	util.inline(VecT.metamethods.__div)
+	VecT.metamethods.__unm = terra(v1: VecT)
+		var v : VecT
+		[entryList(v)] = [wrap(entryList(v1), function(e) return `-e end)]
+		return v
+	end
+	util.inline(VecT.metamethods.__unm)
+
+	-- Other mathematical operations
+	terra VecT:dot(v: VecT)
+		return [reduce(zip(entryList(self), entryList(v), function(a,b) return `a*b end),
+					   function(a,b) return `a+b end)]
+	end
+	util.inline(VecT.methods.dot)
+	terra VecT:distSq(v: VecT)
+		return [reduce(wrap(zip(entryList(self), entryList(v),
+								function(a,b) return `a-b end),
+							function(a) return quote var aa = a in aa*aa end end),
+					   function(a,b) return `a+b end)]
+	end
+	util.inline(VecT.methods.distSq)
+	terra VecT:dist(v: VecT)
+		return ad.math.sqrt(self:distSq(v))
+	end
+	util.inline(VecT.methods.distSq)
+	terra VecT:normSq()
+		return [reduce(wrap(entryList(self),
+							function(a) return `a*a end),
+					   function(a,b) return `a+b end)]
+	end
+	util.inline(VecT.methods.normSq)
+	terra VecT:norm()
+		return ad.math.sqrt(self:normSq())
+	end
+	util.inline(VecT.methods.norm)
+
+	m.addConstructors(VecT)
+	return VecT
+
+end)
+
+
+return
+{
+	Vec = Vec
+}
+
+
+
