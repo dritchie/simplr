@@ -1,64 +1,109 @@
 local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
+local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
 local shapeColor = terralib.require("shapeColor")
-
-
--- Need: SampledFunctionBase, then SampledFunction subclass which is parameterized
---    by accumFn, clampFn
--- Can think of these as a different interface to providing the same information as
---    OpenGL's glBlendFunc and glBlendEquation
--- Default provided clampFns: none, min, softmin
--- Default provided accumFns: replace, over
---    (over treats the last output dimension as alpha?)
+local inheritance = terralib.require("inheritance")
+local ad = terralib.require("ad")
 
 -- Blurring will use the alpha channel (last output dimension), so we'll have to
 --    make sure we always use RGBA color, even when A is constant in the input...
 
--- TODO: Save/load to/from images (need a FreeImage wrapper), parameterized by
---    function specifying how to interpolate onto/from image grid.
--- Default provided functions: nearest neighbor, bilinear.
--- When loading/saving, specify what to write into 'extra' outDims (e.g. loading an
---    RGB image into an RGBA (4-dimensional) structure).
-
-local SampledFunction = templatize(function(real, inDim, outDim)
+local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	
-	local InVec = Vec(real, inDim)
-	local OutVec = Vec(real, outDim)
-	local SamplingPattern = Vector(InVec)
-	local Samples = Vector(OutVec)
+	local SpaceVec = Vec(real, spaceDim)
+	local ColorVec = Color(real, colorDim)
+	local SamplingPattern = Vector(SpaceVec)
+	local Samples = Vector(ColorVec)
 
-	local struct SampledFunctionT = 
+	local struct SampledFunctionBaseT = 
 	{
 		samplingPattern: &SamplingPattern,
 		samples: Samples
 	}
 
-	terra SampledFunctionT:__construct()
+	terra SampledFunctionBaseT:__construct()
 		self.samplingPattern = nil
 		m.init(self.samples)
 	end
 
-	terra SampledFunctionT:__copy(other: &SampledFunctionT)
+	terra SampledFunctionBaseT:__copy(other: &SampledFunctionBaseT)
 		self.samples = m.copy(other.samples)
 	end
 
-	terra SampledFunctionT:__destruct()
+	terra SampledFunctionBaseT:__destruct()
 		m.destruct(self.samples)
 	end
 
-	terra SampledFunctionT:clear()
+	terra SampledFunctionBaseT:clear()
 		self.samplingPattern = nil
 		self.samples:clear()
 	end
 
-	terra SampledFunctionT:setSamplingPattern(pattern: &SamplingPattern)
+	terra SampledFunctionBaseT:setSamplingPattern(pattern: &SamplingPattern)
 		self.samplingPattern = pattern
 		self.samples:resize(pattern.size)
 	end
 
-	terra SampledFunctionT:setSample(which: uint, value: OutVec)
-		self.samples:set(which, value)
+	inheritance.purevirtual(SampledFunctionBaseT, "accumulateSample", {uint, ColorVec}->{})
+
+	m.addConstructors(SampledFunctionBaseT)
+	return SampledFunctionBaseT
+
+end)
+
+
+-- Some default color accumlation / clamping functions
+-- Can think of these as a different interface to providing the same information as
+--    OpenGL's glBlendFunc and glBlendEquation
+local AccumFns = 
+{
+	Replace = function()
+		return macro(function(currColor, newColor) return newColor end)
+	end,
+	Over = function()
+		return macro(function(currColor, newColor)
+			return `newColor:alpha()*newColor + (1.0 - newColor:alpha())*currColor
+		end)
+	end
+}
+local ClampFns = 
+{
+	None = function() return macro(function(color) return color end) end,
+	Min = function(maxval)
+		if maxval == nil then maxval = 1.0 end
+		return macro(function(color)
+			local VecT = color:gettype()
+			return [VecT.map(color, function(ce) return `ad.math.fmin(ce, maxval) end)]
+		end)
+	end,
+	SoftMin = function(power, maxval)
+		if maxval == nil then maxval = 1.0 end
+		return macro(function(color)
+			local VecT = color:gettype()
+			return [VecT.map(color, function(ce)
+				-- TODO: More efficient softmin implementation.
+				return `ad.math.pow(ad.math.pow(ce, -power) + ad.math.pow(maxval, -power), 1.0/-alpha)
+			end)]
+		end)
+	end
+}
+
+
+local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, clampFn)
+
+	accumFn = accumFn or AccumFns.Replace
+	clampFn = clampFn or ClampFns.None
+
+	local ColorVec = Color(real, colorDim)
+	local SampledFunctionBaseT = SampledFunctionBase(real, spaceDim, colorDim)
+
+	local struct SampledFunctionT {}
+	inheritance.dynamicExtend(SampledFunctionBaseT, SampledFunctionT)
+
+	terra SampledFunctionT:accumulateSample(index: uint, color: ColorVec)
+		var currColor = self.samples:get(index)
+		self.samples:set(index, clampFn(accumFn(currColor, color)))
 	end
 
 	m.addConstructors(SampledFunctionT)
@@ -71,24 +116,26 @@ local ImplicitSampler = templatize(function(real, spaceDim, colorDim)
 
 	local Shape = shapeColor.ColoredImplicitShape(real, spaceDim, colorDim)
 	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Vec(real, colorDim)
+	local ColorVec = Color(real, colorDim)
 	local SamplingPattern = Vector(SpaceVec)
 	local Samples = Vector(ColorVec)
+	local SampledFunctionT = SampledFunctionBase(real, spaceDim, colorDim)
 
 	local struct ImplicitSamplerT
 	{
 		shapes: Vector(&Shape),
-		sampledFn: SampledFunction(real, spaceDim, colorDim)
+		sampledFn: &SampledFunctionT
 	}
 
-	terra ImplicitSamplerT:__construct()
+	-- Assumes ownership of sampledFn
+	terra ImplicitSamplerT:__construct(sampledFn: &SampledFunctionT)
 		m.init(self.shapes)
-		m.init(self.sampledFn)
+		self.sampledFn = sampledFn
 	end
 
 	terra ImplicitSamplerT:__destruct()
 		m.destruct(self.shapes)
-		m.destruct(self.sampledFn)
+		m.delete(self.sampledFn)
 	end
 
 	-- Assumes ownership of shape
@@ -104,7 +151,7 @@ local ImplicitSampler = templatize(function(real, spaceDim, colorDim)
 			for shapei=0,self.shapes.size do
 				-- TODO: blur would happen here
 				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
-				self.sampledFn:setSample(sampi, color)
+				self.sampledFn:accumulateSample(sampi, color)
 			end
 		end
 	end
@@ -128,6 +175,8 @@ end)
 
 return 
 {
+	AccumFns = AccumFns,
+	ClampFns = ClampFns,
 	SampledFunction = SampledFunction,
 	ImplicitSampler = ImplicitSampler
 }

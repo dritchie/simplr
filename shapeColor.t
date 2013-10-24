@@ -2,6 +2,7 @@ local m = terralib.require("mem")
 local templatize = terralib.require("templatize")
 local inheritance = terralib.require("inheritance")
 local Vec = terralib.require("linalg").Vec
+local Color = terralib.require("color")
 local shapes = terralib.require("shapes")
 local ImplicitShape = shapes.ImplicitShape
 
@@ -9,7 +10,7 @@ local ImplicitShape = shapes.ImplicitShape
 local ColoredImplicitShapeBase = templatize(function(real, spaceDim, colorDim)
 
 	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Vec(real, colorDim)
+	local ColorVec = Color(real, colorDim)
 
 	local struct ColoredImplicitShapeBaseT {}
 
@@ -27,7 +28,7 @@ local ColoredImplicitShape = templatize(function(real, spaceDim, surfDim, colorD
 
 	local SpaceVec = Vec(real, spaceDim)
 	local SurfVec = Vec(real, surfDim)
-	local ColorVec = Vec(real, colorDim)
+	local ColorVec = Color(real, colorDim)
 	local ImplicitShapeT = ImplicitShape(real, spaceDim, surfDim)
 	local ColoredImplicitShapeBaseT = ColoredImplicitShapeBase(real, spaceDim, colorDim)
 
@@ -50,7 +51,7 @@ local ConstantColorImplicitShape = templatize(function(real, spaceDim, surfDim, 
 
 	local SpaceVec = Vec(real, spaceDim)
 	local SurfVec = Vec(real, surfDim)
-	local ColorVec = Vec(real, colorDim)
+	local ColorVec = Color(real, colorDim)
 	local ImplicitShapeT = ImplicitShape(real, spaceDim, surfDim)
 	local ColoredImplicitShapeT = ColoredImplicitShape(real, spaceDim, surfDim, colorDim)
 

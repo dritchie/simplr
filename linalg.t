@@ -141,6 +141,21 @@ local Vec = templatize(function(real, dim)
 	end
 	util.inline(VecT.methods.norm)
 
+	-- Mapping arbitrary functions over vector elements
+	function VecT.map(vec, fn)
+		return quote
+			var v : VecT
+			[entryList(v)] = [wrap(entryList(vec), fn)]
+		in
+			v
+		end
+	end
+	function VecT.foreach(vec, fn)
+		return quote
+			[wrap(entryList(vec), fn)]
+		end
+	end
+
 	m.addConstructors(VecT)
 	return VecT
 
