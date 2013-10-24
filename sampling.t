@@ -34,6 +34,7 @@ local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	terra SampledFunctionBaseT:__destruct()
 		m.destruct(self.samples)
 	end
+	inheritance.virtual(SampledFunctionBaseT, "__destruct")
 
 	terra SampledFunctionBaseT:clear()
 		self.samplingPattern = nil
@@ -47,7 +48,6 @@ local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 
 	inheritance.purevirtual(SampledFunctionBaseT, "accumulateSample", {uint, ColorVec}->{})
 
-	m.addConstructors(SampledFunctionBaseT)
 	return SampledFunctionBaseT
 
 end)
@@ -105,6 +105,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 		var currColor = self.samples:get(index)
 		self.samples:set(index, clampFn(accumFn(currColor, color)))
 	end
+	inheritance.virtual(SampledFunctionT, "accumulateSample")
 
 	m.addConstructors(SampledFunctionT)
 	return SampledFunctionT

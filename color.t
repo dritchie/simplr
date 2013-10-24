@@ -15,6 +15,9 @@ local Color = templatize(function(real, dim)
 		return `[self].entries[lastindex]
 	end)
 
+	m.addConstructors(ColorT)
+	return ColorT
+
 end)
 
 return Color
