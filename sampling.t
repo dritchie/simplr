@@ -9,6 +9,12 @@ local ad = terralib.require("ad")
 -- Blurring will use the alpha channel (last output dimension), so we'll have to
 --    make sure we always use RGBA color, even when A is constant in the input...
 
+-- TODO: Save/load to/from images, parameterized by
+--    function specifying how to interpolate onto/from image grid.
+-- Default provided functions: nearest neighbor
+-- When loading/saving, specify what to write into 'extra' outDims (e.g. loading an
+--    RGB image into an RGBA (4-dimensional) structure).
+
 local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	
 	local SpaceVec = Vec(real, spaceDim)
