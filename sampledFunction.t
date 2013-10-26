@@ -2,20 +2,13 @@ local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
-local shapeColor = terralib.require("shapeColor")
 local inheritance = terralib.require("inheritance")
 local ad = terralib.require("ad")
+local patterns = terralib.require("samplePatterns")
 
--- Blurring will use the alpha channel (last output dimension), so we'll have to
---    make sure we always use RGBA color, even when A is constant in the input...
 
--- TODO: Save/load to/from images, parameterized by
---    function specifying how to interpolate onto/from image grid.
--- Default provided functions: nearest neighbor
--- When loading/saving, specify what to write into 'extra' outDims (e.g. loading an
---    RGB image into an RGBA (4-dimensional) structure).
-
-local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
+local SampledFunctionBase
+SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	
 	local SpaceVec = Vec(real, spaceDim)
 	local ColorVec = Color(real, colorDim)
@@ -25,11 +18,13 @@ local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	local struct SampledFunctionBaseT = 
 	{
 		samplingPattern: &SamplingPattern,
+		ownsSamplingPattern: bool,
 		samples: Samples
 	}
 
 	terra SampledFunctionBaseT:__construct()
 		self.samplingPattern = nil
+		self.ownsSamplingPattern = false
 		m.init(self.samples)
 	end
 
@@ -38,23 +33,97 @@ local SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	end
 
 	terra SampledFunctionBaseT:__destruct()
+		self:clear()
 		m.destruct(self.samples)
 	end
 	inheritance.virtual(SampledFunctionBaseT, "__destruct")
 
 	terra SampledFunctionBaseT:clear()
+		if self.ownsSamplingPattern then m.delete(self.samplingPattern) end
 		self.samplingPattern = nil
 		self.samples:clear()
 	end
 
 	terra SampledFunctionBaseT:setSamplingPattern(pattern: &SamplingPattern)
+		if self.ownSamplingPattern then m.delete(self.samplingPattern) end
 		self.samplingPattern = pattern
+		self.ownsSamplingPattern = false
+		self.samples:resize(pattern.size)
+	end
+
+	terra SampledFunctionBaseT:ownSamplingPattern(pattern: &SamplingPattern)
+		if self.ownSamplingPattern then m.delete(self.samplingPattern) end
+		self.samplingPattern = m.new(SamplingPattern)
+		self.samplingPattern:__copy(pattern)
+		self.ownsSamplingPattern = true
 		self.samples:resize(pattern.size)
 	end
 
 	inheritance.purevirtual(SampledFunctionBaseT, "accumulateSample", {uint, ColorVec}->{})
 
 	return SampledFunctionBaseT
+
+end)
+
+
+--  Save/load to/from images, parameterized by:
+--    A function specifying how to interpolate onto/from image grid.
+--    What to do with extra color channels (dimension matching)
+-- TODO: Make sampledFns be able to compute bounds on their sampling patterns,
+--    so that we don't have to restrict to functions defined on the unit square.
+SampledFunctionBase.loadFromImage = templatize(function(interpFn, dimMatchFn)
+	
+	-- TODO: Default interpFn, dimMatchFn
+	
+	return macro(function(sampledFn, image)
+		
+		-- Types
+		local FnType = sampledFn:gettype()
+		local ImType = image:gettype()
+		local FnRealType = FnType.__templateParams[1]
+		local FnSpaceDim = FnType.__templateParams[2]
+		local FnColorDim = FnType.__templateParams[3]
+		assert(FnSpaceDim == 2)		-- This must be a 2D function
+
+		-- Main
+		return quote
+			for i=0,sampledFn.samplingPattern.size do
+				var samplePoint = sampledFn.samplingPattern:get(i)
+				-- TODO: normalize samplePoint against fn minx and maxs
+				sampledFn.samples:set(i, dimMatchFn(interpFn(image, samplePoint)))
+			end
+		end
+	end)
+
+end)
+SampledFunctionBase.saveToImage = templatize(function(interpFn, dimMatchFn)
+
+	-- TODO: Default interpFn, dimMatchFn
+	
+	return macro(function(sampledFn, image)
+		
+		-- Types
+		local FnType = sampledFn:gettype()
+		local ImType = image:gettype()
+		local FnRealType = FnType.__templateParams[1]
+		local FnSpaceDim = FnType.__templateParams[2]
+		local FnColorDim = FnType.__templateParams[3]
+		assert(FnSpaceDim == 2)		-- This must be a 2D function
+		local DiscreteVec = Vec(uint, 2)
+
+		-- Main
+		return quote
+			-- TODO: Construct grid out of fn mins and maxs
+			var grid = [patterns.RegularGridPattern(FnRealType, 2)].stackAlloc(
+				DiscreteVec.stackAlloc(image:width(), image:height()))
+			for i=0,grid:storedPattern.size do
+				var samplePoint = grd:storedPattern:get(i)
+				var vec = dimMatchFn(interpFn(sampledFn, samplePoint))
+				-- TODO: Write vec components to pixel (need to match samplePoint with image i,j ...)
+			end
+			m.destruct(grid)
+		end
+	end)
 
 end)
 
@@ -98,8 +167,8 @@ local ClampFns =
 
 local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, clampFn)
 
-	accumFn = accumFn or AccumFns.Replace
-	clampFn = clampFn or ClampFns.None
+	accumFn = accumFn or AccumFns.Replace()
+	clampFn = clampFn or ClampFns.None()
 
 	local ColorVec = Color(real, colorDim)
 	local SampledFunctionBaseT = SampledFunctionBase(real, spaceDim, colorDim)
@@ -119,73 +188,12 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 end)
 
 
-local ImplicitSampler = templatize(function(real, spaceDim, colorDim)
-
-	local Shape = shapeColor.ColoredImplicitShape(real, spaceDim, colorDim)
-	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Color(real, colorDim)
-	local SamplingPattern = Vector(SpaceVec)
-	local Samples = Vector(ColorVec)
-	local SampledFunctionT = SampledFunctionBase(real, spaceDim, colorDim)
-
-	local struct ImplicitSamplerT
-	{
-		shapes: Vector(&Shape),
-		sampledFn: &SampledFunctionT
-	}
-
-	-- Assumes ownership of sampledFn
-	terra ImplicitSamplerT:__construct(sampledFn: &SampledFunctionT)
-		m.init(self.shapes)
-		self.sampledFn = sampledFn
-	end
-
-	terra ImplicitSamplerT:__destruct()
-		m.destruct(self.shapes)
-		m.delete(self.sampledFn)
-	end
-
-	-- Assumes ownership of shape
-	terra ImplicitSamplerT:addShape(shape: &Shape)
-		self.shapes:push(shape)
-	end
-
-	terra ImplicitSamplerT:sample(pattern: &SamplingPattern)
-		self.sampledFn:setSamplingPattern(pattern)
-		-- TODO: More efficient than O(#samples*#shapes)
-		for sampi=0,pattern.size do
-			var samplePoint = pattern:get(sampi)
-			for shapei=0,self.shapes.size do
-				-- TODO: blur would happen here
-				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
-				self.sampledFn:accumulateSample(sampi, color)
-			end
-		end
-	end
-
-	terra ImplicitSamplerT:clearSamples()
-		self.sampledFn:clear()
-	end
-
-	terra ImplicitSamplerT:clearShapes()
-		for i=0,self.shapes.size do
-			m.delete(self.shapes:get(i))
-		end
-		self.shapes:clear()
-	end
-
-	m.addConstructors(ImplicitSamplerT)
-	return ImplicitSamplerT
-
-end)
-
-
 return 
 {
 	AccumFns = AccumFns,
 	ClampFns = ClampFns,
-	SampledFunction = SampledFunction,
-	ImplicitSampler = ImplicitSampler
+	SampledFunctionBase = SampledFunctionBase,
+	SampledFunction = SampledFunction
 }
 
 

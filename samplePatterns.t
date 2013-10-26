@@ -61,9 +61,14 @@ local RegularGridSamplingPattern = templatize(function(real, spaceDim)
 		end
 	end
 
-	terra RegularGridSamplingPatternT:__construct(mins: SpaceVec, maxs: SpaceVec, numCells: CellVec)
+	terra RegularGridSamplingPatternT:__construct(mins: SpaceVec, maxs: SpaceVec, numCells: CellVec) : {}
 		m.init(self.storedPattern)
 		[buildGridLoop(mins, maxs, numCells, self.storedPattern)]
+	end
+
+	-- Without mins and maxs, builds a unit cube
+	terra RegularGridSamplingPatternT:__construct(numCells: CellVec) : {}
+		self:__construct(SpaceVec.stackAlloc(0.0), SpaceVec.stackAlloc(1.0), numCells)
 	end
 
 	terra RegularGridSamplingPatternT:__destruct()

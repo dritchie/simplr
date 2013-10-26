@@ -64,6 +64,11 @@ local Vec = templatize(function(real, dim)
 	terra VecT:__construct([ctorags])
 		[entryList(self)] = [copyWrap(ctorags)]
 	end
+	if dim > 1 then
+		terra VecT:__construct(val: real)
+			[entryList(self)] = [replicate(val, dim)]
+		end
+	end
 	terra VecT:__destruct()
 		[destructWrap(entryList(self))]
 	end
