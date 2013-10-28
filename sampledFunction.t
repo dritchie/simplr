@@ -44,6 +44,17 @@ SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 		self.samples:clear()
 	end
 
+	terra SampledFunctionBaseT:spatialBounds()
+		var mins = SpaceVec.stackAlloc([math.huge])
+		var maxs =SpaceVec.stackAlloc([-math.huge])
+		for i=0,self.samplingPattern.size do
+			var samplePoint = self.samplingPattern:get(i)
+			mins:minInPlace(samplePoint)
+			maxs:maxInPlace(samplePoint)
+		end
+		return mins,maxs
+	end
+
 	terra SampledFunctionBaseT:setSamplingPattern(pattern: &SamplingPattern)
 		if self.ownSamplingPattern then m.delete(self.samplingPattern) end
 		self.samplingPattern = pattern
@@ -61,69 +72,74 @@ SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 
 	inheritance.purevirtual(SampledFunctionBaseT, "accumulateSample", {uint, ColorVec}->{})
 
+	if spaceDim == 2 then
+		--  Save/load to/from images, parameterized by:
+		--    A function specifying how to interpolate onto/from image grid.
+		--    What to do with extra color channels (dimension matching)
+		SampledFunctionBaseT.loadFromImage = templatize(function(ImageType, interpFn, dimMatchFn)
+			
+			-- TODO: Default interpFn, dimMatchFn
+			
+			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+				var range = maxs - mins
+				for i=0,sampledFn.samplingPattern.size do
+					var samplePoint = sampledFn.samplingPattern:get(i)
+					-- Normalize samplePoint before passing to image
+					samplePoint = (samplePoint-mins) / range
+					sampledFn.samples:set(i, dimMatchFn(interpFn(image, samplePoint)))
+				end
+			end
+			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
+				var mins, maxs = sampledFn:spatialBounds()
+				return fn(sampledFn, image, mins, maxs)
+			end)
+			return fn
+
+		end)
+		SampledFunctionBaseT.saveToImage = templatize(function(ImageType, interpFn, dimMatchFn)
+
+			-- TODO: Default interpFn, dimMatchFn
+
+			-- Code gen helper
+			local function arrayElems(ptr, num)
+				local t = {}
+				for i=1,num do
+					local iminus1 = i-1
+					table.insert(t, `ptr[iminus1])
+				end
+				return t
+			end
+
+			local DiscreteVec = Vec(uint, 2)
+			
+			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+				var range = maxs - mins
+				var w = image:width()
+				var h = image:height()
+				var grid = [patterns.RegularGridPattern(real, 2)].stackAlloc(
+					mins, maxs, DiscreteVec.stackAlloc(w, h))
+				for i=0,grid:storedPattern.size do
+					var samplePoint = grd:storedPattern:get(i)
+					var color = dimMatchFn(interpFn(sampledFn, samplePoint))
+					-- Match samplePoint to image i, j, write to image
+					samplePoint = (samplePoint - mins) / range
+					var icoord = [uint](samplePoint.entries[0] * w)
+					var jcoord = [uint](samplePoint.entries[1] * h)
+					var p = image:pixel(icoord, jcoord)
+					[arrayElems(p)] = [ColorVec.entries(color)]
+				end
+				m.destruct(grid)
+			end
+			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
+				var mins, maxs = sampledFn:spatialBounds()
+				return fn(sampledFn, image, mins, maxs)
+			end
+			return fn
+
+		end
+	end)
+
 	return SampledFunctionBaseT
-
-end)
-
-
---  Save/load to/from images, parameterized by:
---    A function specifying how to interpolate onto/from image grid.
---    What to do with extra color channels (dimension matching)
--- TODO: Make sampledFns be able to compute bounds on their sampling patterns,
---    so that we don't have to restrict to functions defined on the unit square.
-SampledFunctionBase.loadFromImage = templatize(function(interpFn, dimMatchFn)
-	
-	-- TODO: Default interpFn, dimMatchFn
-	
-	return macro(function(sampledFn, image)
-		
-		-- Types
-		local FnType = sampledFn:gettype()
-		local ImType = image:gettype()
-		local FnRealType = FnType.__templateParams[1]
-		local FnSpaceDim = FnType.__templateParams[2]
-		local FnColorDim = FnType.__templateParams[3]
-		assert(FnSpaceDim == 2)		-- This must be a 2D function
-
-		-- Main
-		return quote
-			for i=0,sampledFn.samplingPattern.size do
-				var samplePoint = sampledFn.samplingPattern:get(i)
-				-- TODO: normalize samplePoint against fn minx and maxs
-				sampledFn.samples:set(i, dimMatchFn(interpFn(image, samplePoint)))
-			end
-		end
-	end)
-
-end)
-SampledFunctionBase.saveToImage = templatize(function(interpFn, dimMatchFn)
-
-	-- TODO: Default interpFn, dimMatchFn
-	
-	return macro(function(sampledFn, image)
-		
-		-- Types
-		local FnType = sampledFn:gettype()
-		local ImType = image:gettype()
-		local FnRealType = FnType.__templateParams[1]
-		local FnSpaceDim = FnType.__templateParams[2]
-		local FnColorDim = FnType.__templateParams[3]
-		assert(FnSpaceDim == 2)		-- This must be a 2D function
-		local DiscreteVec = Vec(uint, 2)
-
-		-- Main
-		return quote
-			-- TODO: Construct grid out of fn mins and maxs
-			var grid = [patterns.RegularGridPattern(FnRealType, 2)].stackAlloc(
-				DiscreteVec.stackAlloc(image:width(), image:height()))
-			for i=0,grid:storedPattern.size do
-				var samplePoint = grd:storedPattern:get(i)
-				var vec = dimMatchFn(interpFn(sampledFn, samplePoint))
-				-- TODO: Write vec components to pixel (need to match samplePoint with image i,j ...)
-			end
-			m.destruct(grid)
-		end
-	end)
 
 end)
 

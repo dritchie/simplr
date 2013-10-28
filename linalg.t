@@ -103,6 +103,12 @@ local Vec = templatize(function(real, dim)
 			function(a, b) return `a*b end)]
 		return v
 	end)
+	VecT.metamethods.__mul:adddefinition(terra(v1: VecT, v2: VecT)
+		var v : VecT
+		[entryList(v)] = [zip(entryList(v1), entryList(v2),
+			function(a, b) return `a*b end)]
+		return v
+	end)
 	util.inline(VecT.metamethods.__mul)
 	VecT.metamethods.__div = terra(v1: VecT, s: real)
 		var v : VecT
@@ -110,6 +116,12 @@ local Vec = templatize(function(real, dim)
 			function(a, b) return `a/b end)]
 		return v
 	end
+	VecT.metamethods.__div:adddefinition(terra(v1: VecT, v2:VecT)
+		var v: VecT
+		[entryList(v)] = [zip(entryList(v1), entryList(v2)
+			function(a, b) return `a/b end)]
+		return v
+	end)
 	util.inline(VecT.metamethods.__div)
 	VecT.metamethods.__unm = terra(v1: VecT)
 		var v : VecT
@@ -159,6 +171,32 @@ local Vec = templatize(function(real, dim)
 		return quote
 			[wrap(entryList(vec), fn)]
 		end
+	end
+
+	-- Misc
+	terra VecT:maxInPlace(other: VecT)
+		[entryList(self)] = [zip(entryList(self), entryList(other),
+			function(a,b) return `ad.math.fmax(a, b) end)]
+	end
+	util.inline(VecT.methods.maxInPlace)
+	terra VecT:max(other: VecT)
+		var v = m.copy(@self)
+		return v:maxInPlace(other)
+	end
+	util.inline(VecT.methods.max)
+	terra VecT:minInPlace(other: VecT)
+		[entryList(self)] = [zip(entryList(self), entryList(other),
+			function(a,b) return `ad.math.fmin(a, b) end)]
+	end
+	util.inline(VecT.methods.minInPlace)
+	terra VecT:min(other: VecT)
+		var v = m.copy(@self)
+		return v:minInPlace(other)
+	end
+	util.inline(VecT.methods.min)
+
+	function VecT.entries(vec)
+		return entryList(vec)
 	end
 
 	m.addConstructors(VecT)
