@@ -1,6 +1,7 @@
 local m = terralib.require("mem")
 local templatize = terralib.require("templatize")
 local util = terralib.require("util")
+local Color = terralib.require("color")
 
 local FI = os.getenv("FREEIMAGE_H_PATH") and terralib.includec(os.getenv("FREEIMAGE_H_PATH")) or
 		   error("Environment variable 'FREEIMAGE_H_PATH' not defined.")
@@ -89,10 +90,20 @@ local function typeAndBitsPerPixel(dataType, numChannels)
 	end
 end
 
+-- Code gen helper
+local function arrayElems(ptr, num)
+	local t = {}
+	for i=1,num do
+		local iminus1 = i-1
+		table.insert(t, `ptr[iminus1])
+	end
+	return t
+end
 
 local Image = templatize(function(dataType, numChannels)
 	
 	local fit, bpp = typeAndBitsPerPixel(dataType, numChannels)
+	local ColorVec = Color(dataType, numChannels)
 
 	local struct ImageT
 	{
@@ -100,6 +111,7 @@ local Image = templatize(function(dataType, numChannels)
 	}
 	ImageT.DataType = dataType
 	ImageT.NumChannels = numChannels
+	ImageT.ColorVec = ColorVec
 	ImageT.FreeImageType = fit
 	ImageT.BitsPerPixel = bpp
 
@@ -129,10 +141,24 @@ local Image = templatize(function(dataType, numChannels)
 	terra ImageT:height() return FI.FreeImage_GetHeight(self.fibitmap) end
 	util.inline(ImageT.methods.height)
 
-	terra ImageT:pixel(i: uint, j: uint) : &dataType
-		return ([&dataType](FI.FreeImage_GetScanLine(self.fibitmap, j)))+i
+	terra ImageT:pixelData(i: uint, j: uint) : &dataType
+		return ([&dataType](FI.FreeImage_GetScanLine(self.fibitmap, j)))+(numChannels*i)
 	end
-	util.inline(ImageT.methods.pixel)
+	util.inline(ImageT.methods.pixelData)
+
+	terra ImageT:getPixelColor(i: uint, j: uint)
+		var cvec = ColorVec.stackAlloc()
+		var pixelData = self:pixelData(i, j)
+		[ColorVec.entries(cvec)] = [arrayElems(pixelData)]
+		return cvec
+	end
+	util.inline(ImageT.methods.getPixelColor)
+
+	terra ImageT:setPixelColor(i: uint, j: uint, color: ColorVec)
+		var pixelData = self:pixelData(i, j)
+		[arrayElems(pixelData)] = [ColorVec.entries(cvec)]
+	end
+	util.inline(ImageT.methods.setPixelColor)
 
 	m.addConstructors(ImageT)
 	return ImageT

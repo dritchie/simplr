@@ -7,6 +7,99 @@ local ad = terralib.require("ad")
 local patterns = terralib.require("samplePatterns")
 
 
+-- Functions that specify how to quantize/convert color channels
+--    from one datatype to another.
+local ChannelFns = 
+{
+	None = function()
+		return macro(function(src, dst)
+			local DstTyp = dst:gettype()
+			return `[DstTyp](src)
+		end)
+	end,
+	Quantize = function()
+		return macro(function(src, dst)
+			local SrcTyp = src:gettype()
+			local DstTyp = dst:gettype()
+			if SrcTyp:isintegral() and DstTyp:isfloat() then
+				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8)
+				return `src / [DstTyp](intmax)
+			else if SrcTyp:isfloat() and DstTyp:isintegral() then
+				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8)
+				return `[DstTyp](src * intmax)
+			else
+				return `[DstTyp](src)
+			end
+		end)
+	end
+}
+
+
+-- Functions that specify how to deal with 'extra' color channels when
+--    writing to/loading from images.
+local function makeDimMatchFn(extraCompFn)
+	return function(channelFn)
+		channelFn = channelFn or ChannelFns.Quantize()
+		return macro(function(src, dst)
+			local SrcTyp = src:gettype()
+			local DstTyp = dst:gettype()
+			local SrcDim = SrcTyp.__templateParams[2]
+			local DstDim = DstTyp.__templateParams[2]
+			local MinDim = math.min(SrcDim, DstDim)
+			local t = {}
+			for i=1,MinDim do table.insert(t, quote `dst.entries[[i-1]] = channelFn(src.entries[[i-1]]) end)
+			for i=MinDim+1,DstDim do table.insert(t, quote `dst.entries[[i-1]] = channelFn([extraCompFn(src, SrcDim, DstDim, i)]) end)
+		end)
+	end
+end
+local DimensionMatchFns =
+{
+	makeNew = makeDimMatchFn,
+	Zeros = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
+		return 0.0
+	end),
+	ZerosWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
+		if currIndex == dstDim then return 1.0 else return 0.0 end
+	end),
+	RepeatLast = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
+		return `src[[srcDim-1]]
+	end),
+	RepeatLastWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
+		if currIndex == dstDim then return 1.0 else return `src[[srcDim-1]] end
+	end)
+}
+
+-- Functions that specify how to interpolate color from an image
+local ImageInterpFns = 
+{
+	NearestNeighbor = function()
+		return macro(function(image, samplePoint)
+			return quote
+				var i = [uint](samplePoint.entries[0] * image:width())
+				var j = [uint](samplePoint.entries[1] * image:height())
+				var color = image:getPixelColor(i, j)
+			in
+				color
+			end
+		end)
+	end
+}
+
+-- Functions that specify how to interpolate color from a SampledFn
+local SampleInterpFns = 
+{
+	NearestNeighbor = function()
+		-- This is really just a flag indicating that we should do nearest neighbor,
+		--    intead of general interpolation
+		return "NearestNeighbor"
+		-- This is what the structure of a general interpolation function should look like:
+		--    return macro(function(sampledFn, samplePoint)
+		-- 	     --
+		--    end)
+	end
+}
+
+
 local SampledFunctionBase
 SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 	
@@ -78,7 +171,9 @@ SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 		--    What to do with extra color channels (dimension matching)
 		SampledFunctionBaseT.loadFromImage = templatize(function(ImageType, interpFn, dimMatchFn)
 			
-			-- TODO: Default interpFn, dimMatchFn
+			-- Default interpFn, dimMatchFn
+			interpFn = interpFn or ImageInterpFns.NearestNeighbor()
+			dimMatchFn = dimMatchFn or DimensionMatchFns.RepeatLastWithFullAlpha()
 			
 			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 				var range = maxs - mins
@@ -86,7 +181,9 @@ SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 					var samplePoint = sampledFn.samplingPattern:get(i)
 					-- Normalize samplePoint before passing to image
 					samplePoint = (samplePoint-mins) / range
-					sampledFn.samples:set(i, dimMatchFn(interpFn(image, samplePoint)))
+					var sourceColor = interpFn(image, samplePoint)
+					var targetColor = sampledFn.samples:get(i)
+					dimMatchFn(sourceColor, targetColor)
 				end
 			end
 			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
@@ -98,46 +195,64 @@ SampledFunctionBase = templatize(function(real, spaceDim, colorDim)
 		end)
 		SampledFunctionBaseT.saveToImage = templatize(function(ImageType, interpFn, dimMatchFn)
 
-			-- TODO: Default interpFn, dimMatchFn
+			-- Default interpFn, dimMatchFn
+			interpFn = interpFn or SampleInterpFns.NearestNeighbor()
+			dimMatchFn = dimMatchFn or DimensionMatchFns.RepeatLastWithFullAlpha()
 
-			-- Code gen helper
-			local function arrayElems(ptr, num)
-				local t = {}
-				for i=1,num do
-					local iminus1 = i-1
-					table.insert(t, `ptr[iminus1])
+			local ImColorVec = ImageType.ColorVec
+
+			-- Special case the nearest-neighbor interpolation scheme, since it's much more efficient
+			--    to just iterate over samples in this case, instead of over pixel grid locations.
+			if interpFn == SampleInterpFns.NearestNeighbor() then
+				local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+					var range = maxs - mins
+					var w = image:width()
+					var h = image:height()
+					for i=0,sampledFn.samples.size do
+						var samplePoint = sampledFn.samplingPattern:get(i)
+						var sourceColor = sampledFn.samples:get(i)
+						var targetColor = ImColorVec.stackAlloc()
+						dimMatchFn(sourceColor, targetColor)
+						samplePoint = (samplePoint - mins) / range
+						var icoord = [uint](samplePoint.entries[0] * w)
+						var jcoord = [uint](samplePoint.entries[1] * h)
+						image:setPixelColor(icoord, jcoord, targetColor)
+					end
 				end
-				return t
-			end
-
-			local DiscreteVec = Vec(uint, 2)
-			
-			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
-				var range = maxs - mins
-				var w = image:width()
-				var h = image:height()
-				var grid = [patterns.RegularGridPattern(real, 2)].stackAlloc(
-					mins, maxs, DiscreteVec.stackAlloc(w, h))
-				for i=0,grid:storedPattern.size do
-					var samplePoint = grd:storedPattern:get(i)
-					var color = dimMatchFn(interpFn(sampledFn, samplePoint))
-					-- Match samplePoint to image i, j, write to image
-					samplePoint = (samplePoint - mins) / range
-					var icoord = [uint](samplePoint.entries[0] * w)
-					var jcoord = [uint](samplePoint.entries[1] * h)
-					var p = image:pixel(icoord, jcoord)
-					[arrayElems(p)] = [ColorVec.entries(color)]
+				local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
+					var mins, maxs = sampledFn:spatialBounds()
+					return fn(sampledFn, image, mins, maxs)
 				end
-				m.destruct(grid)
+				return fn
+			else
+				local DiscreteVec = Vec(uint, 2)
+				local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+					var range = maxs - mins
+					var w = image:width()
+					var h = image:height()
+					var grid = [patterns.RegularGridPattern(real, 2)].stackAlloc(
+						mins, maxs, DiscreteVec.stackAlloc(w, h))
+					for i=0,grid:storedPattern.size do
+						var samplePoint = grd:storedPattern:get(i)
+						var sourceColor = interpFn(sampledFn, samplePoint)
+						var targetColor = ImColorVec.stackAlloc()
+						dimMatchFn(sourceColor, targetColor)
+						-- Match samplePoint to image i, j, write to image
+						samplePoint = (samplePoint - mins) / range
+						var icoord = [uint](samplePoint.entries[0] * w)
+						var jcoord = [uint](samplePoint.entries[1] * h)
+						image:setPixelColor(icoord, jcoord, targetColor)
+					end
+					m.destruct(grid)
+				end
+				local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
+					var mins, maxs = sampledFn:spatialBounds()
+					return fn(sampledFn, image, mins, maxs)
+				end
+				return fn
 			end
-			local terra fn(sampledFn: &SampledFunctionBaseT, image: &ImageType) : {}
-				var mins, maxs = sampledFn:spatialBounds()
-				return fn(sampledFn, image, mins, maxs)
-			end
-			return fn
-
-		end
-	end)
+		end)
+	end
 
 	return SampledFunctionBaseT
 
