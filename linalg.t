@@ -13,7 +13,7 @@ local Vec = templatize(function(real, dim)
 	-- Code gen helpers
 	local function entryList(self)
 		local t = {}
-		for i=1,dim do table.insert(t, `[self].entries[i]) end
+		for i=1,dim do table.insert(t, `[self].entries[ [i-1] ]) end
 		return t
 	end
 	local function replicate(val, n)
@@ -43,7 +43,7 @@ local Vec = templatize(function(real, dim)
 		for i=1,#expList1 do
 			local e1 = expList1[i]
 			local e2 = expList2[i]
-			table.insert(t, `[binaryFn(e1, e2)])
+			table.insert(t, binaryFn(e1, e2))
 		end
 		return t
 	end
@@ -118,7 +118,7 @@ local Vec = templatize(function(real, dim)
 	end
 	VecT.metamethods.__div:adddefinition(terra(v1: VecT, v2:VecT)
 		var v: VecT
-		[entryList(v)] = [zip(entryList(v1), entryList(v2)
+		[entryList(v)] = [zip(entryList(v1), entryList(v2),
 			function(a, b) return `a/b end)]
 		return v
 	end)

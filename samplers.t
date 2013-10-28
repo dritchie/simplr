@@ -3,21 +3,20 @@ local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
 local shapeColor = terralib.require("shapeColor")
-local sfn = terralib.require("sampledFn")
-local SampledFunctionBase = sfn.SampledFunctionBase
+local SampledFunction = terralib.require("sampledFn")
 
 
 -- Blurring will use the alpha channel (last output dimension), so we'll have to
 --    make sure we always use RGBA color, even when A is constant in the input...
 
-local ImplicitSampler = templatize(function(real, spaceDim, colorDim)
+local ImplicitSampler = templatize(function(real, spaceDim, colorDim, accumFn, clampFn)
 
 	local Shape = shapeColor.ColoredImplicitShape(real, spaceDim, colorDim)
 	local SpaceVec = Vec(real, spaceDim)
 	local ColorVec = Color(real, colorDim)
 	local SamplingPattern = Vector(SpaceVec)
 	local Samples = Vector(ColorVec)
-	local SampledFunctionT = SampledFunctionBase(real, spaceDim, colorDim)
+	local SampledFunctionT = SampledFunction(real, spaceDim, colorDim, accumFn, clampFn)
 
 	local struct ImplicitSamplerT
 	{
