@@ -37,9 +37,10 @@ local Type = makeEnum({"UNKNOWN", "BITMAP", "UINT16", "INT16", "UINT32", "INT32"
 	"RGBA16", "RGBF", "RGBAF"}, 0)
 
 -- FreeImage formats
-local Format = makeEnum({"UNKNOWN", "BMP", "ICO", "JPEG", "JNG", "KOALA", "LBM", "IFF", "MNG", "PBM", "PBMRAW",
+local Format = makeEnum({"UNKNOWN", "BMP", "ICO", "JPEG", "JNG", "KOALA", "LBM", "MNG", "PBM", "PBMRAW",
 	"PCD", "PCX", "PGM", "PGMRAW", "PNG", "PPM", "PPMRAW", "RAS", "TARGA", "TIFF", "WBMP", "PSD", "CUT", "XBM", "XPM",
 	"DDS", "GIF", "HDR", "FAXG3", "SGI", "EXR", "J2K", "JP2", "PFM", "PICT", "RAW"}, -1)
+Format.IFF = Format.LBM
 
 local function bytesToBits(bytes) return bytes*8 end
 local function typeAndBitsPerPixel(dataType, numChannels)
