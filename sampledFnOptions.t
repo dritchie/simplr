@@ -17,10 +17,10 @@ local ChannelFns =
 			local DstTyp = dst:gettype()
 			local SrcTyp = src:gettype()
 			if SrcTyp:isintegral() and DstTyp:isfloat() then
-				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8)
+				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8) - 1
 				return quote [dst] = [src] / [DstTyp](intmax) end
 			elseif SrcTyp:isfloat() and DstTyp:isintegral() then
-				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8)
+				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8) - 1
 				return quote [dst] = [DstTyp]([src] * intmax) end
 			else
 				return quote [dst] = [DstTyp]([src]) end
@@ -60,16 +60,16 @@ local DimensionMatchFns =
 {
 	makeNew = makeDimMatchFn,
 	Zeros = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		return 0.0
+		return `0.0
 	end),
 	ZerosWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		if currIndex == dstDim then return 1.0 else return 0.0 end
+		if currIndex == dstDim then return `1.0 else return `0.0 end
 	end),
 	RepeatLast = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		return `[src][ [srcDim-1] ]
+		return `[src].entries[ [srcDim-1] ]
 	end),
 	RepeatLastWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		if currIndex == dstDim then return 1.0 else return `[src][ [srcDim-1] ] end
+		if currIndex == dstDim then return `1.0 else return `[src].entries[ [srcDim-1] ] end
 	end)
 }
 

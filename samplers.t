@@ -1,9 +1,10 @@
+local m = terralib.require("mem")
 local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
 local shapes = terralib.require("shapes")
-local SampledFunction = terralib.require("sampledFn")
+local SampledFunction = terralib.require("sampledFunction")
 
 
 -- Blurring will use the alpha channel (last output dimension), so we'll have to
@@ -16,23 +17,30 @@ local ImplicitSampler = templatize(function(real, spaceDim, colorDim, accumFn, c
 	local ColorVec = Color(real, colorDim)
 	local SamplingPattern = Vector(SpaceVec)
 	local Samples = Vector(ColorVec)
-	local SampledFunctionT = SampledFunction(real, spaceDim, colorDim, accumFn, clampFn)
+	local SampledFunctionT = nil
+	-- Need to write it this way so that template classes are considered equal where
+	--    they ought to be.
+	if accumFn and clampFn then
+		SampledFunctionT = SampledFunction(real, spaceDim, colorDim, accumFn, clampFn)
+	else
+		SampledFunctionT = SampledFunction(real, spaceDim, colorDim)
+	end
 
 	local struct ImplicitSamplerT
 	{
 		shapes: Vector(&Shape),
 		sampledFn: &SampledFunctionT
 	}
+	ImplicitSamplerT.SampledFunctionType = SampledFunctionT
 
-	-- Assumes ownership of sampledFn
 	terra ImplicitSamplerT:__construct(sampledFn: &SampledFunctionT)
 		m.init(self.shapes)
 		self.sampledFn = sampledFn
 	end
 
 	terra ImplicitSamplerT:__destruct()
+		self:clearShapes()
 		m.destruct(self.shapes)
-		m.delete(self.sampledFn)
 	end
 
 	-- Assumes ownership of shape
@@ -48,7 +56,9 @@ local ImplicitSampler = templatize(function(real, spaceDim, colorDim, accumFn, c
 			for shapei=0,self.shapes.size do
 				-- TODO: blur would happen here
 				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
-				self.sampledFn:accumulateSample(sampi, color)
+				if isovalue <= 0.0 then
+					self.sampledFn:accumulateSample(sampi, color)
+				end
 			end
 		end
 	end

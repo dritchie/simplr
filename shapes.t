@@ -43,20 +43,20 @@ local ConstantColorImplicitShape = templatize(function(real, spaceDim, colorDim)
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, ConstantColorImplicitShapeT)
 
-	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: &ColorVec)
-		self.innerShape = innerShape
-		self.color = @color
+	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: ColorVec)
+		self.innerShape = shape
+		self.color = color
 	end
 
-	terra ConstantColorImplicitShapeT:isovalue(point: &SpaceVec)
-		return innerShape:isovalue(point)
+	terra ConstantColorImplicitShapeT:isovalue(point: &SpaceVec) : real
+		return self.innerShape:isovalue(point)
 	end
-	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue") : real
+	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue")
 
-	terra ConstantColorImplicitShapeT:isovalueAndColor(point: &SpaceVec)
-		return innerShape:isovalue(point), self.color
+	terra ConstantColorImplicitShapeT:isovalueAndColor(point: &SpaceVec) : {real, ColorVec}
+		return self.innerShape:isovalue(point), self.color
 	end
-	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue") : {real, ColorVec}
+	inheritance.virtual(ConstantColorImplicitShapeT, "isovalueAndColor")
 
 	m.addConstructors(ConstantColorImplicitShapeT)
 	return ConstantColorImplicitShapeT
@@ -79,15 +79,15 @@ local SphereImplicitShape = templatize(function(real, spaceDim, colorDim)
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, SphereImplicitShapeT)
 
-	terra SphereImplicitShapeT:__construct(center: &SpaceVec, r: real)
-		self.center = @center
+	terra SphereImplicitShapeT:__construct(center: SpaceVec, r: real)
+		self.center = center
 		self.rSq = r*r
 	end
 
-	terra SphereImplicitShapeT:isovalue(point: &SpaceVec)
+	terra SphereImplicitShapeT:isovalue(point: &SpaceVec) : real
 		return point:distSq(self.center) - self.rSq
 	end
-	inheritance.virtual(SphereImplicitShapeT, "isovalue") : real
+	inheritance.virtual(SphereImplicitShapeT, "isovalue")
 
 	m.addConstructors(SphereImplicitShapeT)
 	return SphereImplicitShapeT
@@ -111,14 +111,14 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 
 	-- NOTE: Assumption is that bot ~= top (we do not do a check for the degeneracy in the
 	--    isovalue function to save time)
-	terra CapsuleImplicitShapeT:__construct(bot: &SpaceVec, top: &SpaceVec, r: real)
-		self.bot = @bot
-		self.top = @top
+	terra CapsuleImplicitShapeT:__construct(bot: SpaceVec, top: SpaceVec, r: real)
+		self.bot = bot
+		self.top = top
 		self.rSq = r*r
 	end
 
-	terra CapsuleImplicitShapeT:isovalue(point: &SpaceVec)
-		var t = (@point - self.bot):(self.top - self.bot)
+	terra CapsuleImplicitShapeT:isovalue(point: &SpaceVec) : real
+		var t = (@point - self.bot):dot(self.top - self.bot)
 		-- Beyond the ends of the cylinder; treat as semispherical caps
 		if t < 0.0 then return point:distSq(bot) - self.rSq end
 		if t > 1.0 then return point:distSq(top) - self.rSq end
@@ -126,7 +126,7 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 		var proj = a + t*(b-a)
 		return point:distSq(proj) - self.rSq
 	end
-	inheritance.virtual(CapsuleImplicitShapeT, "isovalue") : real
+	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
 
 	m.addConstructors(CapsuleImplicitShapeT)
 	return CapsuleImplicitShapeT
