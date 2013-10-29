@@ -1,7 +1,9 @@
+local m = terralib.require("mem")
 local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
+local inheritance = terralib.require("inheritance")
 local patterns = terralib.require("samplePatterns")
 local options = terralib.require("sampledFnOptions")
 
@@ -16,7 +18,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 	local SamplingPattern = Vector(SpaceVec)
 	local Samples = Vector(ColorVec)
 
-	local struct SampledFunctionT = 
+	local struct SampledFunctionT
 	{
 		samplingPattern: &SamplingPattern,
 		ownsSamplingPattern: bool,
@@ -37,10 +39,11 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 		self:clear()
 		m.destruct(self.samples)
 	end
-	inheritance.virtual(SampledFunctionT, "__destruct")
 
 	terra SampledFunctionT:clear()
-		if self.ownsSamplingPattern then m.delete(self.samplingPattern) end
+		if self.ownsSamplingPattern then
+			m.delete(self.samplingPattern)
+		end
 		self.samplingPattern = nil
 		self.samples:clear()
 	end
@@ -57,7 +60,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 	end
 
 	terra SampledFunctionT:setSamplingPattern(pattern: &SamplingPattern)
-		if self.ownSamplingPattern then m.delete(self.samplingPattern) end
+		if self.ownsSamplingPattern then m.delete(self.samplingPattern) end
 		self.samplingPattern = pattern
 		self.ownsSamplingPattern = false
 		self.samples:resize(pattern.size)
@@ -91,16 +94,16 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 				for i=0,sampledFn.samplingPattern.size do
 					var samplePoint = sampledFn.samplingPattern:get(i)
 					-- Normalize samplePoint before passing to image
-					samplePoint = (samplePoint-mins) / range
+					samplePoint = (samplePoint - mins) / range
 					var sourceColor = interpFn(image, samplePoint)
-					var targetColor = sampledFn.samples:get(i)
+					var targetColor = sampledFn.samples:getPointer(i)
 					dimMatchFn(sourceColor, targetColor)
 				end
 			end
-			local terra fn(sampledFn: &SampledFunctionT, image: &ImageType) : {}
+			fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
 				var mins, maxs = sampledFn:spatialBounds()
 				return fn(sampledFn, image, mins, maxs)
-			end)
+			end):getdefinitions()[1])
 			return fn
 
 		end)
@@ -114,7 +117,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 
 			-- Special case the nearest-neighbor interpolation scheme, since it's much more efficient
 			--    to just iterate over samples in this case, instead of over pixel grid locations.
-			if interpFn == SampleInterpFns.NearestNeighbor() then
+			if interpFn == options.SampleInterpFns.NearestNeighbor() then
 				local terra fn(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 					var range = maxs - mins
 					var w = image:width()
@@ -123,17 +126,18 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 						var samplePoint = sampledFn.samplingPattern:get(i)
 						var sourceColor = sampledFn.samples:get(i)
 						var targetColor = ImColorVec.stackAlloc()
-						dimMatchFn(sourceColor, targetColor)
+						dimMatchFn(sourceColor, &targetColor)
+						var oldSamplePoint = samplePoint
 						samplePoint = (samplePoint - mins) / range
 						var icoord = [uint](samplePoint.entries[0] * w)
 						var jcoord = [uint](samplePoint.entries[1] * h)
 						image:setPixelColor(icoord, jcoord, targetColor)
 					end
 				end
-				local terra fn(sampledFn: &SampledFunctionT, image: &ImageType) : {}
+				fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
 					var mins, maxs = sampledFn:spatialBounds()
 					return fn(sampledFn, image, mins, maxs)
-				end
+				end):getdefinitions()[1])
 				return fn
 			else
 				local DiscreteVec = Vec(uint, 2)
@@ -143,11 +147,11 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 					var h = image:height()
 					var grid = [patterns.RegularGridPattern(real, 2)].stackAlloc(
 						mins, maxs, DiscreteVec.stackAlloc(w, h))
-					for i=0,grid:storedPattern.size do
-						var samplePoint = grd:storedPattern:get(i)
+					for i=0,grid.storedPattern.size do
+						var samplePoint = grd.storedPattern:get(i)
 						var sourceColor = interpFn(sampledFn, samplePoint)
 						var targetColor = ImColorVec.stackAlloc()
-						dimMatchFn(sourceColor, targetColor)
+						dimMatchFn(sourceColor, &targetColor)
 						-- Match samplePoint to image i, j, write to image
 						samplePoint = (samplePoint - mins) / range
 						var icoord = [uint](samplePoint.entries[0] * w)
@@ -156,10 +160,10 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 					end
 					m.destruct(grid)
 				end
-				local terra fn(sampledFn: &SampledFunctionT, image: &ImageType) : {}
+				fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
 					var mins, maxs = sampledFn:spatialBounds()
 					return fn(sampledFn, image, mins, maxs)
-				end
+				end):getdefinitions()[1])
 				return fn
 			end
 		end)

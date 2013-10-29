@@ -8,18 +8,18 @@ local ChannelFns =
 {
 	None = function()
 		return macro(function(src, dst)
-			local DstTyp = [dst]:gettype()
+			local DstTyp = dst:gettype()
 			return `[DstTyp]([src])
 		end)
 	end,
 	Quantize = function()
 		return macro(function(src, dst)
-			local SrcTyp = src:gettype()
 			local DstTyp = dst:gettype()
+			local SrcTyp = src:gettype()
 			if SrcTyp:isintegral() and DstTyp:isfloat() then
 				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8)
 				return `[src] / [DstTyp](intmax)
-			else if SrcTyp:isfloat() and DstTyp:isintegral() then
+			elseif SrcTyp:isfloat() and DstTyp:isintegral() then
 				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8)
 				return `[DstTyp]([src] * intmax)
 			else
@@ -36,14 +36,23 @@ local function makeDimMatchFn(extraCompFn)
 	return function(channelFn)
 		channelFn = channelFn or ChannelFns.Quantize()
 		return macro(function(src, dst)
+			-- src is a Color by value, dst is a Color pointer (so we can write into it)
 			local SrcTyp = src:gettype()
-			local DstTyp = dst:gettype()
+			local DstTyp = dst:gettype().type
 			local SrcDim = SrcTyp.__templateParams[2]
 			local DstDim = DstTyp.__templateParams[2]
 			local MinDim = math.min(SrcDim, DstDim)
 			local t = {}
-			for i=1,MinDim do table.insert(t, quote `[dst].entries[ [i-1] ] = channelFn([src].entries[ [i-1] ]) end)
-			for i=MinDim+1,DstDim do table.insert(t, quote `[dst].entries[ [i-1] ] = channelFn([extraCompFn(src, SrcDim, DstDim, i)]) end)
+			for i=1,MinDim do
+				local srce = `[src].entries[ [i-1] ]
+				local dste = `[dst].entries[ [i-1] ]
+				table.insert(t, quote [dste] = channelFn([srce], [dste]) end)
+			end
+			for i=MinDim+1,DstDim do
+				local dste = `[dst].entries[ [i-1] ]
+				table.insert(t, quote [dste] = channelFn([extraCompFn(src, SrcDim, DstDim, i)], [dste]) end)
+			end
+			return t
 		end)
 	end
 end
@@ -115,14 +124,14 @@ local ClampFns =
 		if maxval == nil then maxval = 1.0 end
 		return macro(function(color)
 			local VecT = color:gettype()
-			return [VecT.map(color, function(ce) return `ad.math.fmin([ce], maxval) end)]
+			return `[VecT.map(color, function(ce) return `ad.math.fmin([ce], maxval) end)]
 		end)
 	end,
 	SoftMin = function(power, maxval)
 		if maxval == nil then maxval = 1.0 end
 		return macro(function(color)
 			local VecT = color:gettype()
-			return [VecT.map(color, function(ce)
+			return `[VecT.map(color, function(ce)
 				-- TODO: More efficient softmin implementation.
 				return `ad.math.pow(ad.math.pow([ce], -power) + ad.math.pow(maxval, -power), 1.0/-alpha)
 			end)]

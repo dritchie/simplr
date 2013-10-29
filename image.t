@@ -135,6 +135,10 @@ local Image = templatize(function(dataType, numChannels)
 		self.fibitmap = nil
 	end
 
+	terra ImageT:save(format: int, filename: rawstring)
+		FI.FreeImage_Save(format, self.fibitmap, filename, 0)
+	end
+
 	terra ImageT:width() return FI.FreeImage_GetWidth(self.fibitmap) end
 	util.inline(ImageT.methods.width)
 
@@ -149,14 +153,14 @@ local Image = templatize(function(dataType, numChannels)
 	terra ImageT:getPixelColor(i: uint, j: uint)
 		var cvec = ColorVec.stackAlloc()
 		var pixelData = self:pixelData(i, j)
-		[ColorVec.entries(cvec)] = [arrayElems(pixelData)]
+		[ColorVec.componentExpList(cvec)] = [arrayElems(pixelData, numChannels)]
 		return cvec
 	end
 	util.inline(ImageT.methods.getPixelColor)
 
 	terra ImageT:setPixelColor(i: uint, j: uint, color: ColorVec)
 		var pixelData = self:pixelData(i, j)
-		[arrayElems(pixelData)] = [ColorVec.entries(cvec)]
+		[arrayElems(pixelData, numChannels)] = [ColorVec.componentExpList(color)]
 	end
 	util.inline(ImageT.methods.setPixelColor)
 

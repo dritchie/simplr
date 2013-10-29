@@ -97,18 +97,18 @@ local Vec = templatize(function(real, dim)
 			function(a, b) return `a*b end)]
 		return v
 	end
-	VecT.metamethods.__mul:adddefinition(terra(s: real, v1: VecT)
+	VecT.metamethods.__mul:adddefinition((terra(s: real, v1: VecT)
 		var v : VecT
 		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
 			function(a, b) return `a*b end)]
 		return v
-	end)
-	VecT.metamethods.__mul:adddefinition(terra(v1: VecT, v2: VecT)
+	end):getdefinitions()[1])
+	VecT.metamethods.__mul:adddefinition((terra(v1: VecT, v2: VecT)
 		var v : VecT
 		[entryList(v)] = [zip(entryList(v1), entryList(v2),
 			function(a, b) return `a*b end)]
 		return v
-	end)
+	end):getdefinitions()[1])
 	util.inline(VecT.metamethods.__mul)
 	VecT.metamethods.__div = terra(v1: VecT, s: real)
 		var v : VecT
@@ -116,12 +116,12 @@ local Vec = templatize(function(real, dim)
 			function(a, b) return `a/b end)]
 		return v
 	end
-	VecT.metamethods.__div:adddefinition(terra(v1: VecT, v2:VecT)
+	VecT.metamethods.__div:adddefinition((terra(v1: VecT, v2: VecT)
 		var v: VecT
 		[entryList(v)] = [zip(entryList(v1), entryList(v2),
 			function(a, b) return `a/b end)]
 		return v
-	end)
+	end):getdefinitions()[1])
 	util.inline(VecT.metamethods.__div)
 	VecT.metamethods.__unm = terra(v1: VecT)
 		var v : VecT
@@ -184,6 +184,9 @@ local Vec = templatize(function(real, dim)
 		return quote
 			[wrap(entryList(vec), fn)]
 		end
+	end
+	function VecT.entryExpList(vec)
+		return entryList(vec)
 	end
 
 	-- Min/max

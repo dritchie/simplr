@@ -20,7 +20,7 @@ local ImplicitShape = templatize(function(real, spaceDim, colorDim)
 
 	local struct ImplicitShapeT {}
 
-	terra ImplicitShapeT:__destruct() end
+	terra ImplicitShapeT:__destruct() : {} end
 	inheritance.virtual(ImplicitShapeT, "__destruct")
 
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {&SpaceVec}->{real})
@@ -51,12 +51,12 @@ local ConstantColorImplicitShape = templatize(function(real, spaceDim, colorDim)
 	terra ConstantColorImplicitShapeT:isovalue(point: &SpaceVec)
 		return innerShape:isovalue(point)
 	end
-	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue")
+	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue") : real
 
 	terra ConstantColorImplicitShapeT:isovalueAndColor(point: &SpaceVec)
 		return innerShape:isovalue(point), self.color
 	end
-	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue")
+	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue") : {real, ColorVec}
 
 	m.addConstructors(ConstantColorImplicitShapeT)
 	return ConstantColorImplicitShapeT
@@ -87,7 +87,7 @@ local SphereImplicitShape = templatize(function(real, spaceDim, colorDim)
 	terra SphereImplicitShapeT:isovalue(point: &SpaceVec)
 		return point:distSq(self.center) - self.rSq
 	end
-	inheritance.virtual(SphereImplicitShapeT, "isovalue")
+	inheritance.virtual(SphereImplicitShapeT, "isovalue") : real
 
 	m.addConstructors(SphereImplicitShapeT)
 	return SphereImplicitShapeT
@@ -126,7 +126,7 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 		var proj = a + t*(b-a)
 		return point:distSq(proj) - self.rSq
 	end
-	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
+	inheritance.virtual(CapsuleImplicitShapeT, "isovalue") : real
 
 	m.addConstructors(CapsuleImplicitShapeT)
 	return CapsuleImplicitShapeT

@@ -15,6 +15,8 @@ local Color = templatize(function(real, dim)
 		return `[self].entries[lastindex]
 	end)
 
+	ColorT.componentExpList = VecT.entryExpList
+
 	m.addConstructors(ColorT)
 	return ColorT
 

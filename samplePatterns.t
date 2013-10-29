@@ -5,7 +5,6 @@ local Vec = terralib.require("linalg").Vec
 local Vector = terralib.require("vector")
 local util = terralib.require("util")
 
-
 local SamplingPattern = templatize(function(real, spaceDim)
 	
 	local SpaceVec = Vec(real, spaceDim)
@@ -13,10 +12,10 @@ local SamplingPattern = templatize(function(real, spaceDim)
 
 	local struct SamplingPatternT {}
 
-	terra SamplingPatternT:__destruct() end
+	terra SamplingPatternT:__destruct() : {} end
 	inheritance.virtual(SamplingPatternT, "__destruct")
 
-	inheritance.purevirtual(SamplingPatternT, "getSamplePattern()", {}->{&SamplePattern})
+	inheritance.purevirtual(SamplingPatternT, "getSamplePattern", {}->{&SamplePattern})
 
 	return SamplingPatternT
 
@@ -46,16 +45,16 @@ local RegularGridSamplingPattern = templatize(function(real, spaceDim)
 			table.insert(newcoords, coord)
 			-- Base case: we're at the last dimension
 			if whichDim == spaceDim-1 then
-				return `[samplePoints]:push(SpaceVec.stackAlloc([coords]))
+				return `[samplePoints]:push(SpaceVec.stackAlloc([newcoords]))
 			-- Recursive case: generate another loop
 			else
 				return buildGridLoop(mins, maxs, numCells, samplePoints, unpack(newcoords))
 			end
 		end
 		return quote
-			for i=0,[numCells][whichDim] do
-				var t = (i+0.5)/[numCells][whichDim]  -- Samples at grid cell centroids
-				var coord = (1.0-t)*[mins][whichDim] + t*[maxs][whichDim]
+			for i=0,[numCells].entries[whichDim] do
+				var t = (i+0.5)/[numCells].entries[whichDim]  -- Samples at grid cell centroids
+				var coord = (1.0-t)*[mins].entries[whichDim] + t*[maxs].entries[whichDim]
 				[loopBody(coord)]
 			end
 		end
@@ -63,7 +62,7 @@ local RegularGridSamplingPattern = templatize(function(real, spaceDim)
 
 	terra RegularGridSamplingPatternT:__construct(mins: SpaceVec, maxs: SpaceVec, numCells: CellVec) : {}
 		m.init(self.storedPattern)
-		[buildGridLoop(mins, maxs, numCells, self.storedPattern)]
+		[buildGridLoop(mins, maxs, numCells, `self.storedPattern)]
 	end
 
 	-- Without mins and maxs, builds a unit cube
@@ -71,12 +70,12 @@ local RegularGridSamplingPattern = templatize(function(real, spaceDim)
 		self:__construct(SpaceVec.stackAlloc(0.0), SpaceVec.stackAlloc(1.0), numCells)
 	end
 
-	terra RegularGridSamplingPatternT:__destruct()
+	terra RegularGridSamplingPatternT:__destruct() : {}
 		m.destruct(self.storedPattern)
 	end
 	inheritance.virtual(RegularGridSamplingPatternT, "__destruct")
 
-	terra RegularGridSamplingPatternT:getSamplePattern()
+	terra RegularGridSamplingPatternT:getSamplePattern() : &SamplePattern
 		return &self.storedPattern
 	end
 	inheritance.virtual(RegularGridSamplingPatternT, "getSamplePattern")
