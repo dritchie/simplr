@@ -89,6 +89,7 @@ local SphereImplicitShape = templatize(function(real, spaceDim, colorDim)
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
 
+	m.addConstructors(SphereImplicitShapeT)
 	return SphereImplicitShapeT
 
 end)
@@ -127,6 +128,7 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
 
+	m.addConstructors(CapsuleImplicitShapeT)
 	return CapsuleImplicitShapeT
 
 end)
