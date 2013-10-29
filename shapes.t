@@ -13,12 +13,16 @@ local inheritance = terralib.require("inheritance")
 --    shapes are rendered (i.e. they will be rendered in batches according to their types.)
 
 
-local ImplicitShape = templatize(function(real, spaceDim, colorDim)
+local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 
-	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Color(real, colorDim)
+	assert(SpaceVec.__generatorTemplate == Vec)
+	assert(ColorVec.__generatorTemplate == Color)
+
+	local real = SpaceVec.RealType
 
 	local struct ImplicitShapeT {}
+	ImplicitShapeT.SpaceVec = SpaceVec
+	ImplicitShapeT.ColorVec = ColorVec
 
 	terra ImplicitShapeT:__destruct() : {} end
 	inheritance.virtual(ImplicitShapeT, "__destruct")
@@ -30,11 +34,11 @@ local ImplicitShape = templatize(function(real, spaceDim, colorDim)
 
 end)
 
-local ConstantColorImplicitShape = templatize(function(real, spaceDim, colorDim)
+local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 
-	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Color(real, colorDim)
-	local ImplicitShapeT = ImplicitShape(real, spaceDim, colorDim)
+	local real = SpaceVec.RealType
+
+	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct ConstantColorImplicitShapeT
 	{
@@ -67,10 +71,11 @@ end)
 -- TODO: For these concrete shapes, is it faster to use the generalized implicit formula
 --    or to tranform into a canonical one? Currently using generalized.
 
-local SphereImplicitShape = templatize(function(real, spaceDim, colorDim)
+local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 
-	local SpaceVec = Vec(real, spaceDim)
-	local ImplicitShapeT = ImplicitShape(real, spaceDim, colorDim)
+	local real = SpaceVec.RealType
+
+	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct SphereImplicitShapeT
 	{
@@ -96,10 +101,11 @@ end)
 
 -- Cylinder with hemispherical caps at either end (much easier to implement/efficient to
 --    evaluate than a true cylinder).
-local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
+local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
+
+	local real = SpaceVec.RealType
 	
-	local SpaceVec = Vec(real, spaceDim)
-	local ImplicitShapeT = ImplicitShape(real, spaceDim, colorDim)
+	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct CapsuleImplicitShapeT
 	{

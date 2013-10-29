@@ -5,9 +5,10 @@ local Vec = terralib.require("linalg").Vec
 local Vector = terralib.require("vector")
 local util = terralib.require("util")
 
-local SamplingPattern = templatize(function(real, spaceDim)
+local SamplingPattern = templatize(function(SpaceVec)
+
+	assert(SpaceVec.__generatorTemplate == Vec)
 	
-	local SpaceVec = Vec(real, spaceDim)
 	local SamplePattern = Vector(SpaceVec)
 
 	local struct SamplingPatternT {}
@@ -22,12 +23,11 @@ local SamplingPattern = templatize(function(real, spaceDim)
 end)
 
 
-local RegularGridSamplingPattern = templatize(function(real, spaceDim)
+local RegularGridSamplingPattern = templatize(function(SpaceVec)
 
-	local SpaceVec = Vec(real, spaceDim)
-	local CellVec = Vec(uint, spaceDim)
+	local CellVec = Vec(uint, SpaceVec.Dimension)
 	local SamplePattern = Vector(SpaceVec)
-	local SamplingPatternT = SamplingPattern(real, spaceDim)
+	local SamplingPatternT = SamplingPattern(SpaceVec)
 
 	local struct RegularGridSamplingPatternT
 	{
@@ -44,7 +44,7 @@ local RegularGridSamplingPattern = templatize(function(real, spaceDim)
 			local newcoords = util.copytable(coords)
 			table.insert(newcoords, coord)
 			-- Base case: we're at the last dimension
-			if whichDim == spaceDim-1 then
+			if whichDim == SpaceVec.Dimension-1 then
 				return `[samplePoints]:push(SpaceVec.stackAlloc([newcoords]))
 			-- Recursive case: generate another loop
 			else

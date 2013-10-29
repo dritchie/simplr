@@ -8,22 +8,25 @@ local patterns = terralib.require("samplePatterns")
 local options = terralib.require("sampledFnOptions")
 
 
-local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, clampFn)
+local SampledFunction = templatize(function(SpaceVec, ColorVec, accumFn, clampFn)
+
+	assert(SpaceVec.__generatorTemplate == Vec)
+	assert(ColorVec.__generatorTemplate == Color)
 
 	accumFn = accumFn or options.AccumFns.Replace()
 	clampFn = clampFn or options.ClampFns.None()
 	
-	local SpaceVec = Vec(real, spaceDim)
-	local ColorVec = Color(real, colorDim)
 	local SamplingPattern = Vector(SpaceVec)
-	local Samples = Vector(ColorVec)
 
 	local struct SampledFunctionT
 	{
 		samplingPattern: &SamplingPattern,
 		ownsSamplingPattern: bool,
-		samples: Samples
+		samples: Vector(ColorVec)
 	}
+	SampledFunctionT.SpaceVec = SpaceVec
+	SampledFunctionT.ColorVec = ColorVec
+	SampledFunctionT.SamplingPattern = SamplingPattern
 
 	terra SampledFunctionT:__construct()
 		self.samplingPattern = nil
@@ -79,7 +82,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 		self.samples:set(index, clampFn(accumFn(currColor, color)))
 	end
 
-	if spaceDim == 2 then
+	if SpaceVec.Dimension == 2 then
 		--  Save/load to/from images, parameterized by:
 		--    A function specifying how to interpolate onto/from image grid.
 		--    What to do with extra color channels (dimension matching)
