@@ -105,7 +105,9 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 	{
 		bot: SpaceVec,
 		top: SpaceVec,
-		rSq: real
+		rSq: real,
+		topMinusBot: SpaceVec,
+		sqLen: real
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, CapsuleImplicitShapeT)
 
@@ -115,15 +117,19 @@ local CapsuleImplicitShape = templatize(function(real, spaceDim, colorDim)
 		self.bot = bot
 		self.top = top
 		self.rSq = r*r
+		self.topMinusBot = top - bot
+		self.sqLen = self.topMinusBot:normSq()
 	end
 
+	local C = terralib.includec("stdio.h")
+
 	terra CapsuleImplicitShapeT:isovalue(point: &SpaceVec) : real
-		var t = (@point - self.bot):dot(self.top - self.bot)
+		var t = (@point - self.bot):dot(self.topMinusBot) / self.sqLen
 		-- Beyond the ends of the cylinder; treat as semispherical caps
-		if t < 0.0 then return point:distSq(bot) - self.rSq end
-		if t > 1.0 then return point:distSq(top) - self.rSq end
+		if t < 0.0 then return point:distSq(self.bot) - self.rSq end
+		if t > 1.0 then return point:distSq(self.top) - self.rSq end
 		-- Inside the bounds of the cylinder; treat as shaft
-		var proj = a + t*(b-a)
+		var proj = self.bot + t*self.topMinusBot
 		return point:distSq(proj) - self.rSq
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
