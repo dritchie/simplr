@@ -158,6 +158,19 @@ local Vec = templatize(function(real, dim)
 	end
 	util.inline(VecT.methods.norm)
 
+	terra VecT:distSqToLineSeg(a: VecT, b: VecT) : real
+		var sqlen = a:distSq(b)
+		-- Degenerate zero length segment
+		if sqlen == 0.0 then return self:distSq(a) end
+		var t = (@self - a):dot(b - a) / sqlen
+		-- Beyond the bounds of the segment
+		if t < 0.0 then return self:distSq(a) end
+		if t > 1.0 then return self:distSq(b) end
+		-- Normal case (projection onto segment)
+		var proj = a + t*(b - a)
+		return self:distSq(proj)
+	end
+
 	-- Mapping arbitrary functions over vector elements
 	function VecT.map(vec, fn)
 		return quote
@@ -173,7 +186,7 @@ local Vec = templatize(function(real, dim)
 		end
 	end
 
-	-- Misc
+	-- Min/max
 	terra VecT:maxInPlace(other: VecT)
 		[entryList(self)] = [zip(entryList(self), entryList(other),
 			function(a,b) return `ad.math.fmax(a, b) end)]
@@ -195,14 +208,12 @@ local Vec = templatize(function(real, dim)
 	end
 	util.inline(VecT.methods.min)
 
-	function VecT.entries(vec)
-		return entryList(vec)
-	end
 
 	m.addConstructors(VecT)
 	return VecT
 
 end)
+
 
 
 return

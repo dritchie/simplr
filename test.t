@@ -3,7 +3,7 @@ local linalg = terralib.require("linalg")
 local Vec3d = linalg.Vec(double, 3)
 -- local im = terralib.require("image")
 
-Vec3d.methods.dot:printpretty(false)
+Vec3d.methods.dot:printpretty(true)
 
 -- local RGBImage = im.Image(uint8, 3)
 

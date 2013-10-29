@@ -2,7 +2,7 @@ local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
-local shapeColor = terralib.require("shapeColor")
+local shapes = terralib.require("shapes")
 local SampledFunction = terralib.require("sampledFn")
 
 
@@ -11,7 +11,7 @@ local SampledFunction = terralib.require("sampledFn")
 
 local ImplicitSampler = templatize(function(real, spaceDim, colorDim, accumFn, clampFn)
 
-	local Shape = shapeColor.ColoredImplicitShape(real, spaceDim, colorDim)
+	local Shape = shapes.ImplicitShape(real, spaceDim, colorDim)
 	local SpaceVec = Vec(real, spaceDim)
 	local ColorVec = Color(real, colorDim)
 	local SamplingPattern = Vector(SpaceVec)
@@ -44,7 +44,7 @@ local ImplicitSampler = templatize(function(real, spaceDim, colorDim, accumFn, c
 		self.sampledFn:setSamplingPattern(pattern)
 		-- TODO: More efficient than O(#samples*#shapes)
 		for sampi=0,pattern.size do
-			var samplePoint = pattern:get(sampi)
+			var samplePoint = pattern:getPointer(sampi)
 			for shapei=0,self.shapes.size do
 				-- TODO: blur would happen here
 				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
