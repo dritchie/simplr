@@ -4,6 +4,7 @@ local Vec = linalg.Vec
 local Vec3d = linalg.Vec(double, 3)
 local Vec2d = linalg.Vec(double, 2)
 local Vec2u = linalg.Vec(uint, 2)
+local Vec3f = linalg.Vec(float, 3)
 local Color = terralib.require("color")
 local Color1d = Color(double, 1)
 local im = terralib.require("image")
@@ -84,6 +85,7 @@ testSampler()
 -- local terra testVec()
 -- 	var v = Vec3d.stackAlloc(1.0, 2.0, 3.0)
 -- 	var d = v:dot(v)
+-- 	var v2 = Vec3f(v)
 -- 	m.destruct(v)
 -- 	return d
 -- end

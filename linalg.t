@@ -3,12 +3,15 @@ local m = terralib.require("mem")
 local util = terralib.require("util")
 local ad = terralib.require("ad")
 
-local Vec = templatize(function(real, dim)
+local Vec
+Vec = templatize(function(real, dim)
 
 	local struct VecT
 	{
 		entries: real[dim]
 	}
+	VecT.RealType = real
+	VecT.Dimension = dim
 
 	-- Code gen helpers
 	local function entryList(self)
@@ -74,6 +77,22 @@ local Vec = templatize(function(real, dim)
 	end
 	terra VecT:__copy(other: &VecT)
 		[entryList(self)] = [copyWrap(entryList(other))]
+	end
+
+	-- Casting vector types (e.g. Vec(float, 3) --> Vec(double, 3))
+	function VecT.metamethods.__cast(from, to, exp)
+		if (from.__generatorTemplate and from.__generatorTemplate == Vec) and
+		   (to.__generatorTemplate and to.__generatorTemplate == Vec) and
+		   (from.Dimension == to.Dimension) then
+		   return `[to].stackAlloc([entryList(exp)])
+		elseif not (from.__generatorTemplate and from.__generatorTemplate == Vec) then
+			error(string.format("'%s' is not a Vec type", from))
+		elseif not (to.__generatorTemplate and to.__generatorTemplate == Vec) then
+			error(string.format("'%s' is not a Vec type", to))
+		elseif not (from.Dimension == to.Dimension) then
+			error(string.format("'%s' has dimension %u, but '%s' has dimension %u",
+				from, from.Dimension, to, to.Dimension))
+		end
 	end
 
 	-- Arithmetic operators
