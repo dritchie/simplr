@@ -89,7 +89,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 			interpFn = interpFn or options.ImageInterpFns.NearestNeighbor()
 			dimMatchFn = dimMatchFn or options.DimensionMatchFns.RepeatLastWithFullAlpha()
 			
-			local terra fn(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+			return terra(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 				var range = maxs - mins
 				for i=0,sampledFn.samplingPattern.size do
 					var samplePoint = sampledFn.samplingPattern:get(i)
@@ -100,12 +100,6 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 					dimMatchFn(sourceColor, targetColor)
 				end
 			end
-			fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
-				var mins, maxs = sampledFn:spatialBounds()
-				return fn(sampledFn, image, mins, maxs)
-			end):getdefinitions()[1])
-			return fn
-
 		end)
 		SampledFunctionT.saveToImage = templatize(function(ImageType, interpFn, dimMatchFn)
 
@@ -118,7 +112,7 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 			-- Special case the nearest-neighbor interpolation scheme, since it's much more efficient
 			--    to just iterate over samples in this case, instead of over pixel grid locations.
 			if interpFn == options.SampleInterpFns.NearestNeighbor() then
-				local terra fn(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+				return terra(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 					var range = maxs - mins
 					var w = image:width()
 					var h = image:height()
@@ -134,14 +128,9 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 						image:setPixelColor(icoord, jcoord, targetColor)
 					end
 				end
-				fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
-					var mins, maxs = sampledFn:spatialBounds()
-					return fn(sampledFn, image, mins, maxs)
-				end):getdefinitions()[1])
-				return fn
 			else
 				local DiscreteVec = Vec(uint, 2)
-				local terra fn(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
+				return terra(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 					var range = maxs - mins
 					var w = image:width()
 					var h = image:height()
@@ -160,11 +149,6 @@ local SampledFunction = templatize(function(real, spaceDim, colorDim, accumFn, c
 					end
 					m.destruct(grid)
 				end
-				fn:adddefinition((terra(sampledFn: &SampledFunctionT, image: &ImageType) : {}
-					var mins, maxs = sampledFn:spatialBounds()
-					return fn(sampledFn, image, mins, maxs)
-				end):getdefinitions()[1])
-				return fn
 			end
 		end)
 	end

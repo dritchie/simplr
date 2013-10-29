@@ -136,7 +136,9 @@ local Image = templatize(function(dataType, numChannels)
 	end
 
 	terra ImageT:save(format: int, filename: rawstring)
-		FI.FreeImage_Save(format, self.fibitmap, filename, 0)
+		if FI.FreeImage_Save(format, self.fibitmap, filename, 0) == 0 then
+			util.fatalError("Failed to save image named '%s'\n", filename)
+		end
 	end
 
 	terra ImageT:width() return FI.FreeImage_GetWidth(self.fibitmap) end
