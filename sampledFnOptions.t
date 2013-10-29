@@ -9,7 +9,7 @@ local ChannelFns =
 	None = function()
 		return macro(function(src, dst)
 			local DstTyp = dst:gettype()
-			return `[DstTyp]([src])
+			return quote [dst] = [DstTyp]([src]) end
 		end)
 	end,
 	Quantize = function()
@@ -18,12 +18,12 @@ local ChannelFns =
 			local SrcTyp = src:gettype()
 			if SrcTyp:isintegral() and DstTyp:isfloat() then
 				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8)
-				return `[src] / [DstTyp](intmax)
+				return quote [dst] = [src] / [DstTyp](intmax) end
 			elseif SrcTyp:isfloat() and DstTyp:isintegral() then
 				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8)
-				return `[DstTyp]([src] * intmax)
+				return quote [dst] = [DstTyp]([src] * intmax) end
 			else
-				return `[DstTyp]([src])
+				return quote [dst] = [DstTyp]([src]) end
 			end
 		end)
 	end
@@ -46,11 +46,11 @@ local function makeDimMatchFn(extraCompFn)
 			for i=1,MinDim do
 				local srce = `[src].entries[ [i-1] ]
 				local dste = `[dst].entries[ [i-1] ]
-				table.insert(t, quote [dste] = channelFn([srce], [dste]) end)
+				table.insert(t, `channelFn([srce], [dste]))
 			end
 			for i=MinDim+1,DstDim do
 				local dste = `[dst].entries[ [i-1] ]
-				table.insert(t, quote [dste] = channelFn([extraCompFn(src, SrcDim, DstDim, i)], [dste]) end)
+				table.insert(t, `channelFn([extraCompFn(src, SrcDim, DstDim, i)], [dste]))
 			end
 			return t
 		end)
