@@ -156,14 +156,14 @@ local Image = templatize(function(dataType, numChannels)
 	terra ImageT:getPixelColor(i: uint, j: uint)
 		var cvec = ColorVec.stackAlloc()
 		var pixelData = self:pixelData(i, j)
-		[ColorVec.componentExpList(cvec)] = [arrayElems(pixelData, numChannels)]
+		[ColorVec.entryExpList(cvec)] = [arrayElems(pixelData, numChannels)]
 		return cvec
 	end
 	util.inline(ImageT.methods.getPixelColor)
 
 	terra ImageT:setPixelColor(i: uint, j: uint, color: ColorVec)
 		var pixelData = self:pixelData(i, j)
-		[arrayElems(pixelData, numChannels)] = [ColorVec.componentExpList(color)]
+		[arrayElems(pixelData, numChannels)] = [ColorVec.entryExpList(color)]
 	end
 	util.inline(ImageT.methods.setPixelColor)
 

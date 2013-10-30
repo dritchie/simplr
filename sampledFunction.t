@@ -8,7 +8,7 @@ local patterns = terralib.require("samplePatterns")
 local options = terralib.require("sampledFnOptions")
 
 
-local SampledFunction = templatize(function(SpaceVec, ColorVec, accumFn, clampFn)
+local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn)
 
 	assert(SpaceVec.__generatorTemplate == Vec)
 	assert(ColorVec.__generatorTemplate == Color)

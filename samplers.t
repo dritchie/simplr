@@ -3,6 +3,7 @@ local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local templatize = terralib.require("templatize")
+local ad = terralib.require("ad")
 
 
 -- Blurring will use the alpha channel (last output dimension), so we'll have to
@@ -12,6 +13,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
 	assert(SampledFunctionT.ColorVec == Shape.ColorVec)
 
+	local real = Shape.SpaceVec.RealType
 	local SamplingPattern = SampledFunctionT.SamplingPattern
 
 	local struct ImplicitSamplerT
@@ -35,49 +37,38 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		self.shapes:push(shape)
 	end
 
-	-- ImplicitSamplerT.methods.sample = macro(function(self, pattern, doSmoothing)
-	-- 	if doSmoothing == nil then
-	-- 		doSmoothing = false
-	-- 	else
-	-- 		assert(doSmoothing:gettype() == bool)
-	-- 		local smooth = doSmoothing:asvalue()
-	-- 		assert(smooth)
-	-- 	end
-	-- 	local function handleSample(index, isovalue, color)
-	-- 		if not smooth then
-	-- 			return `if [isovalue] < 0.0 then [self].sampledFn:accumulateSample([index], [color]) end
-	-- 		else
-	-- 			-- Deal with smoothing here
-	-- 		end
-	-- 	end
-	-- 	return quote
-	-- 		self.sampledFn:setSamplingPattern(pattern)
-	-- 		-- TODO: More efficient than O(#samples*#shapes)
-	-- 		for sampi=0,pattern.size do
-	-- 			var samplePoint = pattern:getPointer(sampi)
-	-- 			for shapei=0,self.shapes.size do
-	-- 				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
-	-- 				if isovalue <= 0.0 then
-	-- 					self.sampledFn:accumulateSample(sampi, color)
-	-- 				end
-	-- 			end
-	-- 		end
-	-- 	end
-	-- end)
-
-	terra ImplicitSamplerT:sample(pattern: &SamplingPattern)
-		self.sampledFn:setSamplingPattern(pattern)
-		-- TODO: More efficient than O(#samples*#shapes)
-		for sampi=0,pattern.size do
-			var samplePoint = pattern:getPointer(sampi)
-			for shapei=0,self.shapes.size do
-				var isovalue, color = self.shapes:get(shapei):isovalueAndColor(samplePoint)
-				if isovalue <= 0.0 then
-					self.sampledFn:accumulateSample(sampi, color)
+	local function buildSampleFunction(smoothing)
+		local function loopBodySharp(self, index, isovalue, color)
+			return quote if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end end
+		end
+		local function loopBodySmooth(self, index, isovalue, color, smoothParam)
+			-- TODO: Fast approximation to exp?
+			return quote 
+				var multiplier = ad.math.exp(-[isovalue] / [smoothParam])
+				[self].sampledFn:accumulateSample([index], multiplier * [color])
+			end
+		end
+		local self = symbol(&ImplicitSamplerT, "self")
+		local pattern = symbol(&SamplingPattern, "pattern")
+		local smoothParam = symbol(real, "smoothParam")
+		local params = {self, pattern}
+		if smoothing then table.insert(params, smoothParam) end
+		return terra([params])
+			[self].sampledFn:setSamplingPattern([pattern])
+			-- TODO: More efficient than O(#samples*#shapes)
+			for sampi=0,[pattern].size do
+				var samplePoint = [pattern]:getPointer(sampi)
+				for shapei=0,[self].shapes.size do
+					var isovalue, color = [self].shapes:get(shapei):isovalueAndColor(samplePoint)
+					[smoothing and loopBodySmooth(self, sampi, isovalue, color, smoothParam) or
+								   loopBodySharp(self, sampi, isovalue, color)]
 				end
 			end
 		end
 	end
+
+	ImplicitSamplerT.methods.sampleSharp = buildSampleFunction(false)
+	ImplicitSamplerT.methods.sampleSmooth = buildSampleFunction(true)
 
 	terra ImplicitSamplerT:clearSamples()
 		self.sampledFn:clear()

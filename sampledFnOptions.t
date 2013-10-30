@@ -1,6 +1,5 @@
 local ad = terralib.require("ad")
-
-
+local Color = terralib.require("Color")
 
 -- Functions that specify how to quantize/convert color channels
 --    from one datatype to another.
@@ -113,7 +112,7 @@ local AccumFns =
 	end,
 	Over = function()
 		return macro(function(currColor, newColor)
-			return `[newColor]:alpha()*[newColor] + (1.0 - [newColor]:alpha())*[currColor]
+			return `Color.alpha([newColor])*[newColor] + (1.0 - Color.alpha([newColor]))*[currColor]
 		end)
 	end
 }
@@ -133,7 +132,7 @@ local ClampFns =
 			local VecT = color:gettype()
 			return `[VecT.map(color, function(ce)
 				-- TODO: More efficient softmin implementation.
-				return `ad.math.pow(ad.math.pow([ce], -power) + ad.math.pow(maxval, -power), 1.0/-alpha)
+				return `ad.math.pow(ad.math.pow([ce], -power) + ad.math.pow(maxval, -power), 1.0/-power)
 			end)]
 		end)
 	end
