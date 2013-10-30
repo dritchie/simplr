@@ -216,7 +216,8 @@ Vec = templatize(function(real, dim)
 	util.inline(VecT.methods.maxInPlace)
 	terra VecT:max(other: VecT)
 		var v = m.copy(@self)
-		return v:maxInPlace(other)
+		v:maxInPlace(other)
+		return v
 	end
 	util.inline(VecT.methods.max)
 	terra VecT:minInPlace(other: VecT)
@@ -226,7 +227,8 @@ Vec = templatize(function(real, dim)
 	util.inline(VecT.methods.minInPlace)
 	terra VecT:min(other: VecT)
 		var v = m.copy(@self)
-		return v:minInPlace(other)
+		v:minInPlace(other)
+		return v
 	end
 	util.inline(VecT.methods.min)
 

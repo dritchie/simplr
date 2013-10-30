@@ -61,14 +61,8 @@ local DimensionMatchFns =
 	Zeros = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
 		return `0.0
 	end),
-	ZerosWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		if currIndex == dstDim then return `1.0 else return `0.0 end
-	end),
 	RepeatLast = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
 		return `[src].entries[ [srcDim-1] ]
-	end),
-	RepeatLastWithFullAlpha = makeDimMatchFn(function(src, srcDim, dstDim, currIndex)
-		if currIndex == dstDim then return `1.0 else return `[src].entries[ [srcDim-1] ] end
 	end)
 }
 
@@ -111,8 +105,16 @@ local AccumFns =
 		return macro(function(currColor, newColor) return newColor end)
 	end,
 	Over = function()
+		return macro(function(currColor, newColor, alpha)
+			return `[alpha]*[newColor] + (1.0 - [alpha])*[currColor]
+		end)
+	end,
+	Sum = function()
+		return macro(function(currColor, newColor) return `currColor + newColor end)
+	end,
+	Max = function()
 		return macro(function(currColor, newColor)
-			return `Color.alpha([newColor])*[newColor] + (1.0 - Color.alpha([newColor]))*[currColor]
+			return `[currColor]:max([newColor])
 		end)
 	end
 }

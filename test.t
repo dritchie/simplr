@@ -13,7 +13,6 @@ local Color3d = Color(double, 3)
 
 local im = terralib.require("image")
 local RGBImage = im.Image(uint8, 3)
-local RGBAImage = im.Image(uint8, 4)
 
 local patterns = terralib.require("samplePatterns")
 local ImgGridPattern = patterns.RegularGridSamplingPattern(Vec2d)
@@ -47,18 +46,24 @@ local terra testSampler()
 	var sfn = SampledFunction2d1d.stackAlloc()
 	var sampler = ImplicitSampler2d1d.stackAlloc(&sfn)
 
-	var circle = Circle2d1d.stackAlloc(Vec2d.stackAlloc(0.5, 0.5), 0.25)
+	var circle = Circle2d1d.stackAlloc(Vec2d.stackAlloc(0.4, 0.5), 0.1)
 	var coloredCircle = ConstColorShape2d1d.heapAlloc(&circle, Color1d.stackAlloc(1.0))
-	var capsule = Capsule2d1d.stackAlloc(Vec2d.stackAlloc(0.5, 0.2), Vec2d.stackAlloc(0.5, 0.8), 0.05)
-	var coloredCapsule = ConstColorShape2d1d.heapAlloc(&capsule, Color1d.stackAlloc(1.0))
-	sampler:addShape(coloredCapsule)
+	var circle2 = Circle2d1d.stackAlloc(Vec2d.stackAlloc(0.6, 0.5), 0.1)
+	var coloredCircle2 = ConstColorShape2d1d.heapAlloc(&circle2, Color1d.stackAlloc(1.0))
+	var circle3 = Circle2d1d.stackAlloc(Vec2d.stackAlloc(0.5, 0.7), 0.1)
+	var coloredCircle3 = ConstColorShape2d1d.heapAlloc(&circle3, Color1d.stackAlloc(1.0))
+	-- var capsule = Capsule2d1d.stackAlloc(Vec2d.stackAlloc(0.5, 0.2), Vec2d.stackAlloc(0.5, 0.8), 0.05)
+	-- var coloredCapsule = ConstColorShape2d1d.heapAlloc(&capsule, Color1d.stackAlloc(1.0))
+	-- sampler:addShape(coloredCapsule)
 	sampler:addShape(coloredCircle)
+	sampler:addShape(coloredCircle2)
+	sampler:addShape(coloredCircle3)
 
 	sampler:sampleSmooth(gridPattern:getSamplePattern(), 0.01)
 	-- sampler:sampleSharp(gridPattern:getSamplePattern())
 
-	var image = RGBAImage.stackAlloc(500, 500)
-	[SampledFunction2d1d.saveToImage(RGBAImage)](&sfn, &image, zeros, ones)
+	var image = RGBImage.stackAlloc(500, 500)
+	[SampledFunction2d1d.saveToImage(RGBImage)](&sfn, &image, zeros, ones)
 	image:save(im.Format.PNG, "shape.png")
 	m.destruct(image)
 	m.destruct(sampler)
@@ -108,3 +113,6 @@ testSampler()
 -- 	return d
 -- end
 -- print(testVec())
+
+
+

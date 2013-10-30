@@ -16,6 +16,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 	accumFn = accumFn or options.AccumFns.Replace()
 	clampFn = clampFn or options.ClampFns.None()
 	
+	local colorReal = ColorVec.RealType
 	local SamplingPattern = Vector(SpaceVec)
 
 	local struct SampledFunctionT
@@ -77,9 +78,13 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 		self.samples:resize(pattern.size)
 	end
 
-	terra SampledFunctionT:accumulateSample(index: uint, color: ColorVec)
+	terra SampledFunctionT:accumulateSample(index: uint, color: ColorVec, alpha: colorReal) : {}
 		var currColor = self.samples:get(index)
-		self.samples:set(index, clampFn(accumFn(currColor, color)))
+		self.samples:set(index, clampFn(accumFn(currColor, color, alpha)))
+	end
+
+	terra SampledFunctionT:accumulateSample(index: uint, color: ColorVec) : {}
+		self:accumulateSample(index, color, 1.0)
 	end
 
 	if SpaceVec.Dimension == 2 then
@@ -90,7 +95,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 			
 			-- Default interpFn, dimMatchFn
 			interpFn = interpFn or options.ImageInterpFns.NearestNeighbor()
-			dimMatchFn = dimMatchFn or options.DimensionMatchFns.RepeatLastWithFullAlpha()
+			dimMatchFn = dimMatchFn or options.DimensionMatchFns.RepeatLast()
 			
 			return terra(sampledFn: &SampledFunctionT, image: &ImageType, mins: SpaceVec, maxs: SpaceVec) : {}
 				var range = maxs - mins
@@ -108,7 +113,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 
 			-- Default interpFn, dimMatchFn
 			interpFn = interpFn or options.SampleInterpFns.NearestNeighbor()
-			dimMatchFn = dimMatchFn or options.DimensionMatchFns.RepeatLastWithFullAlpha()
+			dimMatchFn = dimMatchFn or options.DimensionMatchFns.RepeatLast()
 
 			local ImColorVec = ImageType.ColorVec
 

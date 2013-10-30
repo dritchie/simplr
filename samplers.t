@@ -44,8 +44,8 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		local function loopBodySmooth(self, index, isovalue, color, smoothParam)
 			-- TODO: Fast approximation to exp?
 			return quote 
-				var multiplier = ad.math.exp(-[isovalue] / [smoothParam])
-				[self].sampledFn:accumulateSample([index], multiplier * [color])
+				var alpha = ad.math.exp(-[isovalue] / [smoothParam])
+				[self].sampledFn:accumulateSample([index], [color], alpha)
 			end
 		end
 		local self = symbol(&ImplicitSamplerT, "self")
