@@ -6,9 +6,6 @@ local templatize = terralib.require("templatize")
 local ad = terralib.require("ad")
 
 
--- Blurring will use the alpha channel (last output dimension), so we'll have to
---    make sure we always use RGBA color, even when A is constant in the input...
-
 local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
 	assert(SampledFunctionT.ColorVec == Shape.ColorVec)

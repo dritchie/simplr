@@ -175,8 +175,8 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 					util.fatalError("Attempt to compare two sample sets drawn from different sampling patterns.\n")			
 				end
 				for i=0,self.samplingPattern.size do
-					var s1 = self.samplingPattern:getPointer(i)
-					var s2 = fn2.samplingPattern:getPointer(i)
+					var s1 = self.samples:getPointer(i)
+					var s2 = fn2.samples:getPointer(i)
 					[processingFn(s1, s2)]
 				end
 			end

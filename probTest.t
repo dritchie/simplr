@@ -67,115 +67,130 @@ end)
 
 -- Load up the target image. This only needs to be done once, since
 --    the type of this object is not dependent upon the 'real' type
-local target = m.gc(terralib.new(SampledFunction2d1d))
-local targetFilename = "squiggle_200.png"
-local imgWidth = global(int)
-local imgHeight = global(int)
-local grid = global(ImgGridPattern)
-local terra loadTarget()
-	target:__construct()
-	var image = RGBImage.stackAlloc(im.Format.PNG, targetFilename)
-	imgWidth = image:width()
-	imgHeight = image:height()
-	grid = ImgGridPattern.stackAlloc(
-		Vec2d.stackAlloc(0.0),
-		Vec2d.stackAlloc(1.0),
-		Vec2u.stackAlloc(imgWidth, imgHeight))
-	target:setSamplingPattern(grid:getSamplePattern())
-	[SampledFunction2d1d.loadFromImage(RGBImage)](&target, &image,
-		Vec2d.stackAlloc(0.0), Vec2d.stackAlloc(1.0))
-	m.destruct(image)
+local function loadTargetImage(filename)
+	local target = m.gc(terralib.new(SampledFunction2d1d))
+	local terra loadTarget(targetFilename: rawstring)
+		target:__construct()
+		var image = RGBImage.stackAlloc(im.Format.PNG, targetFilename)
+		var imgWidth = image:width()
+		var imgHeight = image:height()
+		var grid = ImgGridPattern.stackAlloc(
+			Vec2d.stackAlloc(0.0),
+			Vec2d.stackAlloc(1.0),
+			Vec2u.stackAlloc(imgWidth, imgHeight))
+		target:ownSamplingPattern(grid:getSamplePattern())
+		[SampledFunction2d1d.loadFromImage(RGBImage)](&target, &image,
+			Vec2d.stackAlloc(0.0), Vec2d.stackAlloc(1.0))
+		m.destruct(grid)
+		m.destruct(image)
+		return imgWidth, imgHeight
+	end
+	local width, height = loadTarget(filename)
+	return {target = target, width = width, height = height}
 end
-loadTarget()
 
--- Probabilistic program for polyline grammars.
-local function polylineProgram()
+-- Probabilistic program for random polylines.
+local function polylineProgram(targetData)
+	local target = targetData.target
+	return function()
 
-	-- Shorthand for common non-structural ERPs
-	local ngaussian = macro(function(mean, sd)
-		return `gaussian([mean], [sd], {structural=false})
-	end)
-	local ngamma = macro(function(alpha, beta)
-		return `gamma([alpha], [beta], {structural=false})
-	end)
+		-- Shorthand for common non-structural ERPs
+		local ngaussian = macro(function(mean, sd)
+			return `gaussian([mean], [sd], {structural=false})
+		end)
+		local ngamma = macro(function(alpha, beta)
+			return `gamma([alpha], [beta], {structural=false})
+		end)
 
-	local terra rotate(dir: Vec2d, angle: double)
-		var x = dir.entries[0]
-		var y = dir.entries[1]
-		var cosang = ad.math.cos(angle)
-		var sinang = ad.math.sin(angle)
-		return Vec2d.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
-	end
-
-	-- A bunch of constants. Perhaps factor these out?
-	local numSegs = 20
-	local startPosPriorMean = 0.5
-	local startPosPriorSD = 0.2
-	local startDirPriorMean = 0.0
-	local startDirPriorSD = math.pi/3.0
-	local lengthPriorAlpha = 0.5
-	local lengthPriorBeta = 0.5
-	local anglePriorMean = 0.0
-	local anglePriorSD = 0.1
-
-	-- The 'prior' part of the program which generates the polyine to be rendered.
-	local polyline = pfn(terra()
-		var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
-		points:getPointer(0).entries[0] = ngaussian(startPosPriorMean, startPosPriorSD)
-		points:getPointer(0).entries[1] = ngaussian(startPosPriorMean, startPosPriorSD)
-		var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), ngaussian(startDirPriorMean, startDirPriorSD))
-		var len = 0.0
-		for i=1,numSegs do
-			len = ngamma(lengthPriorAlpha, lengthPriorBeta)
-			dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
-			points:set(i, points:get(i-1) + (len*dir))
+		local terra rotate(dir: Vec2d, angle: double)
+			var x = dir.entries[0]
+			var y = dir.entries[1]
+			var cosang = ad.math.cos(angle)
+			var sinang = ad.math.sin(angle)
+			return Vec2d.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
 		end
-		return points
-	end)
 
-	-- The sample set and sampler are 'global' to the inference chain since it
-	--    is wasteful to reconstruct these every iteration.
-	-- Technically, there will end up being one set of globals for each 
-	--    specialization of the program.
-	local samples = m.gc(terralib.new(SampledFunction2d1d))
-	local sampler = m.gc(terralib.new(ImplicitSampler2d1d))
-	local terra initSamplerGlobals()
-		samples = SampledFunction2d1d.stackAlloc()
-		sampler = ImplicitSampler2d1d.stackAlloc(&samples)
+		-- A bunch of constants. Perhaps factor these out?
+		local numSegs = 40
+		local startPosPriorMean = 0.5
+		local startPosPriorSD = 0.25
+		local startDirPriorMean = 0.0
+		local startDirPriorSD = math.pi/3.0
+		local lengthPriorAlpha = 0.5
+		local lengthPriorBeta = 0.1
+		local anglePriorMean = 0.0
+		local anglePriorSD = math.pi/6.0
 
-	end
-	initSamplerGlobals()
+		-- The 'prior' part of the program which generates the polyine to be rendered.
+		local polyline = pfn(terra()
+			var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
+			points:getPointer(0).entries[0] = ngaussian(startPosPriorMean, startPosPriorSD)
+			points:getPointer(0).entries[1] = ngaussian(startPosPriorMean, startPosPriorSD)
+			var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), ngaussian(startDirPriorMean, startDirPriorSD))
+			var len = 0.0
+			for i=1,numSegs do
+				len = ngamma(lengthPriorAlpha, lengthPriorBeta)
+				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
+				points:set(i, points:get(i-1) + (len*dir))
+			end
+			return points
+		end)
+		-- local polyline = pfn(terra()
+		-- 	var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
+		-- 	for i=0,numSegs do
+		-- 		points:getPointer(i).entries[0] = ngaussian(startPosPriorMean, startPosPriorSD)
+		-- 		points:getPointer(i).entries[1] = ngaussian(startPosPriorMean, startPosPriorSD)
+		-- 	end
+		-- 	return points
+		-- end)
 
-	-- Likelihood subroutine (renders polyline)
-	local lineThickness = 0.02
-	local constColor = m.gc(terralib.new(Color1d))
-	constColor:__construct(1.0)
-	local terra renderSegments(points: &Vector(Vec2d))
-		sampler:clear()
-		for i=0,points.size-1 do
-			var capsule = Capsule2d1d.heapAlloc(points:get(i), points:get(i+1), lineThickness)
-			var coloredCapsule = ConstColorShape2d1d.heapAlloc(capsule, constColor)
-			sampler:addShape(coloredCapsule)
+		-- The sample set and sampler are 'global' to the inference chain since it
+		--    is wasteful to reconstruct these every iteration.
+		-- Technically, there will end up being one set of globals for each 
+		--    specialization of the program.
+		local samples = m.gc(terralib.new(SampledFunction2d1d))
+		local sampler = m.gc(terralib.new(ImplicitSampler2d1d))
+		local terra initSamplerGlobals()
+			samples = SampledFunction2d1d.stackAlloc()
+			sampler = ImplicitSampler2d1d.stackAlloc(&samples)
+
 		end
-		var spattern = grid:getSamplePattern()
-		sampler:sampleSharp(spattern)
-		return &samples
-	end
+		initSamplerGlobals()
 
-	-- Overall likelihood function, which computes MSE between rendered polyline
-	--   and target image.
-	local terra renderAndMatchFactor(points: &Vector(Vec2d))
-		renderSegments(points)
-		return -mse(&samples, &target)
-	end
+		-- Likelihood subroutine (renders polyline)
+		local lineThickness = 0.015
+		local constColor = m.gc(terralib.new(Color1d))
+		constColor:__construct(1.0)
+		local terra renderSegments(points: &Vector(Vec2d))
+			sampler:clear()
+			for i=0,points.size-1 do
+				var capsule = Capsule2d1d.heapAlloc(points:get(i), points:get(i+1), lineThickness)
+				var coloredCapsule = ConstColorShape2d1d.heapAlloc(capsule, constColor)
+				sampler:addShape(coloredCapsule)
+			end
+			var spattern = target.samplingPattern
+			sampler:sampleSharp(spattern)
+			return &samples
+		end
 
-	-- Module exports
-	return
-	{
-		prior = polyline,
-		likelihood = renderAndMatchFactor,
-		render = renderSegments
-	}
+		-- Overall likelihood function, which computes MSE between rendered polyline
+		--   and target image.
+		local constraintStrength = 2.0
+		local terra renderAndMatchFactor(points: &Vector(Vec2d))
+			renderSegments(points)
+			var err = mse(&samples, &target)
+			return -constraintStrength * err
+		end
+
+		-- Module exports
+		return
+		{
+			prior = polyline,
+			likelihood = renderAndMatchFactor,
+			render = renderSegments,
+			targetData = targetData
+		}
+	end
 end
 
 
@@ -191,18 +206,15 @@ local function constrainedProgram(program)
 	end
 end
 
-
 -- Do inference
 local kernel = RandomWalk()
 local numsamps = 1000
-local function doInference()
-	local prog = constrainedProgram(polylineProgram)
+local function doInference(program)
 	local terra fn()
-		return [mcmc(prog, kernel, {numsamps=numsamps, verbose=true})]
+		return [mcmc(program, kernel, {numsamps=numsamps, verbose=true})]
 	end
 	return m.gc(fn())
 end
-local samps = doInference()
 
 
 -- Render a video of the sequence of accepted states
@@ -213,10 +225,12 @@ local function renderVideo(prog, samps, directory, name)
 	local framebasename = directory .. "/movieframe_%06d.png"
 	local framewildcard = directory .. "/movieframe_*.png"
 	local p = prog()
+	local width = p.targetData.width
+	local height = p.targetData.height
 	local function renderFrames(samps, basename)
 		return quote
 			var framename : int8[1024]
-			var image = RGBImage.stackAlloc(imgWidth, imgHeight)
+			var image = RGBImage.stackAlloc(width, height)
 			var zeros = Vec2d.stackAlloc(0.0)
 			var ones = Vec2d.stackAlloc(1.0)
 			for i=0,[samps].size do
@@ -235,7 +249,13 @@ local function renderVideo(prog, samps, directory, name)
 	util.wait(string.format("rm -f %s", framewildcard))
 	print("done.")
 end
-renderVideo(polylineProgram, samps, "renders", "movie")
+
+
+------------------
+
+local program = polylineProgram(loadTargetImage("squiggle_200.png"))
+local samps = doInference(constrainedProgram(program))
+renderVideo(program, samps, "renders", "movie")
 
 
 
