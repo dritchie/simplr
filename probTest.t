@@ -3,6 +3,7 @@ terralib.require("prob")
 
 
 local m = terralib.require("mem")
+local util = terralib.require("util")
 local templatize = terralib.require("templatize")
 local ad = terralib.require("ad")
 
@@ -37,22 +38,30 @@ local ImplicitSampler2d1d = ImplicitSampler(SampledFunction2d1d, Shape2d1d)
 
 local C = terralib.includecstring [[
 #include <stdio.h>
+#include <string.h>
 ]]
 
 --------------
 
 
 -- Calculate mean squared error between two sample sets
-local mse = templatize(function(SampledFunctionT1, SampledFunctionT2)
+local mse = macro(function(fnPointer1, fnPointer2)
+	local SampledFunctionT1 = fnPointer1:gettype().type
+	local SampledFunctionT2 = fnPointer2:gettype().type
+	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
+	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
+	local accumType = SampledFunctionT1.ColorVec.RealType
 	local function makeProcessFn(accum)
 		return function(color1, color2)
 			return quote [accum] = [accum] + [color1]:distSq(@[color2]) end
 		end 
 	end
-	return terra(fn1: &SampledFunctionT1, fn2: &SampledFunctionT2)
-		var accum = 0.0
-		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accum))](fn1, fn2)
-		return accum / fn1.samples.size
+	return quote
+		var accum : accumType = 0.0
+		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accum))](fnPointer1, fnPointer2)
+		var result = accum / fnPointer1.samples.size
+	in
+		result
 	end
 end)
 
@@ -79,8 +88,8 @@ local terra loadTarget()
 end
 loadTarget()
 
--- The probabilistic program we do inference over
-local function program()
+-- Probabilistic program for polyline grammars.
+local function polylineProgram()
 
 	-- Shorthand for common non-structural ERPs
 	local ngaussian = macro(function(mean, sd)
@@ -150,34 +159,85 @@ local function program()
 		end
 		var spattern = grid:getSamplePattern()
 		sampler:sampleSharp(spattern)
+		return &samples
 	end
 
 	-- Overall likelihood function, which computes MSE between rendered polyline
 	--   and target image.
 	local terra renderAndMatchFactor(points: &Vector(Vec2d))
 		renderSegments(points)
-		return [mse(SampledFunction2d1d, SampledFunction2d1d)](&samples, &target)
+		return -mse(&samples, &target)
 	end
 
-	-- The top-level computation that inference runs on.
-	return terra()
-		var points = polyline()
-		factor(renderAndMatchFactor(&points))
-		return points
+	-- Module exports
+	return
+	{
+		prior = polyline,
+		likelihood = renderAndMatchFactor,
+		render = renderSegments
+	}
+end
+
+
+-- Actual program we do inference over
+local function constrainedProgram(program)
+	return function()
+		local p = program()
+		return terra()
+			var structure = p.prior()
+			factor(p.likelihood(&structure))
+			return structure
+		end
 	end
 end
 
 
--- Do inference!
+-- Do inference
 local kernel = RandomWalk()
 local numsamps = 1000
 local function doInference()
+	local prog = constrainedProgram(polylineProgram)
 	local terra fn()
-		return [mcmc(program, kernel, {numsamps=numsamps, verbose=true})]
+		return [mcmc(prog, kernel, {numsamps=numsamps, verbose=true})]
 	end
 	return m.gc(fn())
 end
-doInference()
+local samps = doInference()
+
+
+-- Render a video of the sequence of accepted states
+local function renderVideo(prog, samps, directory, name)
+	io.write("Rendering video...")
+	io.flush()
+	local moviefilename = string.format("%s/%s.mp4", directory, name)
+	local framebasename = directory .. "/movieframe_%06d.png"
+	local framewildcard = directory .. "/movieframe_*.png"
+	local p = prog()
+	local function renderFrames(samps, basename)
+		return quote
+			var framename : int8[1024]
+			var image = RGBImage.stackAlloc(imgWidth, imgHeight)
+			var zeros = Vec2d.stackAlloc(0.0)
+			var ones = Vec2d.stackAlloc(1.0)
+			for i=0,[samps].size do
+				var samp = [samps]:getPointer(i)
+				var renderedSamples = p.render(&samp.value)
+				[SampledFunction2d1d.saveToImage(RGBImage)](renderedSamples, &image, zeros, ones)
+				C.sprintf(framename, [basename], i)
+				image:save(im.Format.PNG, framename)
+			end
+			m.destruct(image)
+		end
+	end
+	local terra doRenderFrames() : {} [renderFrames(samps, framebasename)] end
+	doRenderFrames()
+	util.wait(string.format("ffmpeg -y -r 5 -i %s -c:v libx264 -r 5 -pix_fmt yuv420p %s 2>&1", framebasename, moviefilename))
+	util.wait(string.format("rm -f %s", framewildcard))
+	print("done.")
+end
+renderVideo(polylineProgram, samps, "renders", "movie")
+
+
 
 
 
