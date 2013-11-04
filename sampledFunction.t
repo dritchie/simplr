@@ -1,4 +1,5 @@
 local m = terralib.require("mem")
+local util = terralib.require("util")
 local Vector = terralib.require("vector")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
@@ -71,7 +72,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 	end
 
 	terra SampledFunctionT:ownSamplingPattern(pattern: &SamplingPattern)
-		if self.ownSamplingPattern then m.delete(self.samplingPattern) end
+		if self.ownsSamplingPattern then m.delete(self.samplingPattern) end
 		self.samplingPattern = m.new(SamplingPattern)
 		self.samplingPattern:__copy(pattern)
 		self.ownsSamplingPattern = true
@@ -160,6 +161,27 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 			end
 		end)
 	end
+
+	-- Process samples in lock-step with samples from an identical sampling
+	--    pattern (but possibly of a different type)
+	SampledFunctionT.lockstep = templatize(
+	function(SampledFunctionT2, processingFn)
+		assert(SampledFunctionT.SpaceVec.Dimension == SampledFunctionT2.SpaceVec.Dimension)
+		return macro(function(self, fn2)
+			assert(self:gettype() == &SampledFunctionT)
+			assert(fn2:gettype() == &SampledFunctionT2)
+			return quote
+				if self.samplingPattern ~= fn2.samplingPattern then
+					util.fatalError("Attempt to compare two sample sets drawn from different sampling patterns.\n")			
+				end
+				for i=0,self.samplingPattern.size do
+					var s1 = self.samplingPattern:getPointer(i)
+					var s2 = fn2.samplingPattern:getPointer(i)
+					[processingFn(s1, s2)]
+				end
+			end
+		end)
+	end)
 
 	m.addConstructors(SampledFunctionT)
 	return SampledFunctionT

@@ -12,6 +12,7 @@ local ad = terralib.require("ad")
 local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
 	assert(SampledFunctionT.ColorVec == Shape.ColorVec)
+	assert(SampledFunctionT.SpaceVec.Dimension == Shape.SpaceVec.Dimension)
 
 	local real = Shape.SpaceVec.RealType
 	local SamplingPattern = SampledFunctionT.SamplingPattern
@@ -28,7 +29,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	end
 
 	terra ImplicitSamplerT:__destruct()
-		self:clearShapes()
+		self:clear()
 		m.destruct(self.shapes)
 	end
 
@@ -79,6 +80,11 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 			m.delete(self.shapes:get(i))
 		end
 		self.shapes:clear()
+	end
+
+	terra ImplicitSamplerT:clear()
+		self:clearShapes()
+		self:clearSamples()
 	end
 
 	m.addConstructors(ImplicitSamplerT)

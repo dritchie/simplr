@@ -122,6 +122,9 @@ local Image = templatize(function(dataType, numChannels)
 
 	terra ImageT:__construct(format: int, filename: rawstring)
 		self.fibitmap = FI.FreeImage_Load(format, filename, 0)
+		if self.fibitmap == nil then
+			util.fatalError("Could not load image file '%s'\n", filename)
+		end
 		-- C.printf("mine - fit: %u, bpp: %u\n", fit, bpp)
 		-- C.printf("file - fit: %u, bpp: %u\n", FI.FreeImage_GetImageType(self.fibitmap), FI.FreeImage_GetBPP(self.fibitmap))
 		if not (fit == FI.FreeImage_GetImageType(self.fibitmap) and

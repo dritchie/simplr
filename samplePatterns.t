@@ -5,6 +5,7 @@ local Vec = terralib.require("linalg").Vec
 local Vector = terralib.require("vector")
 local util = terralib.require("util")
 
+
 local SamplingPattern = templatize(function(SpaceVec)
 
 	assert(SpaceVec.__generatorTemplate == Vec)

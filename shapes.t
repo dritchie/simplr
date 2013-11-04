@@ -47,10 +47,16 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, ConstantColorImplicitShapeT)
 
+	-- Takes ownserhip of 'shape'
 	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: ColorVec)
 		self.innerShape = shape
 		self.color = color
 	end
+
+	terra ConstantColorImplicitShapeT:__destruct() : {}
+		m.delete(self.innerShape)
+	end
+	inheritance.virtual(ConstantColorImplicitShapeT, "__destruct")
 
 	terra ConstantColorImplicitShapeT:isovalue(point: &SpaceVec) : real
 		return self.innerShape:isovalue(point)
