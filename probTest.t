@@ -199,6 +199,14 @@ end
 -- Probabilistic code for random polylines.
 local function polylineModule()
 
+	local Vec2 = Vec(real, 2)
+	local Color1 = Color(real, 1)
+	local SampledFunctionType = SampledFunction(Vec2d, Color1)
+	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
+	local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
+	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
+	local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
+
 	-- Shorthand for common non-structural ERPs
 	local ngaussian = macro(function(mean, sd)
 		return `gaussian([mean], [sd], {structural=false})
@@ -207,12 +215,12 @@ local function polylineModule()
 		return `uniformWithFalloff([lo], [hi], {structural=false})
 	end)
 
-	local terra rotate(dir: Vec2d, angle: double)
+	local terra rotate(dir: Vec2, angle: real)
 		var x = dir.entries[0]
 		var y = dir.entries[1]
 		var cosang = ad.math.cos(angle)
 		var sinang = ad.math.sin(angle)
-		return Vec2d.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
+		return Vec2.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
 	end
 
 	-- A bunch of constants. Perhaps factor these out?
@@ -227,37 +235,37 @@ local function polylineModule()
 	local anglePriorSD = math.pi/6.0
 
 	-- The 'prior' part of the program which generates the polyine to be rendered.
-	local polyline = pfn(terra()
-		var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
-		points:getPointer(0).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
-		points:getPointer(0).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
-		var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
-		var len = 0.0
-		for i=1,numSegs do
-			len = nuniformWithFalloff(lengthMin, lengthMax)
-			dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
-			points:set(i, points:get(i-1) + (len*dir))
-		end
-		return points
-	end)
 	-- local polyline = pfn(terra()
 	-- 	var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
-	-- 	for i=0,numSegs do
-	-- 		points:getPointer(i).entries[0] = ngaussian(startPosPriorMean, startPosPriorSD)
-	-- 		points:getPointer(i).entries[1] = ngaussian(startPosPriorMean, startPosPriorSD)
+	-- 	points:getPointer(0).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
+	-- 	points:getPointer(0).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
+	-- 	var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
+	-- 	var len = 0.0
+	-- 	for i=1,numSegs do
+	-- 		len = nuniformWithFalloff(lengthMin, lengthMax)
+	-- 		dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
+	-- 		points:set(i, points:get(i-1) + (len*dir))
 	-- 	end
 	-- 	return points
 	-- end)
+	local polyline = pfn(terra()
+		var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
+		for i=0,numSegs do
+			points:getPointer(i).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
+			points:getPointer(i).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
+		end
+		return points
+	end)
 
 	-- Rendering polyline (used by likelihood module)
 	local lineThickness = 0.015
-	local constColor = m.gc(terralib.new(Color1d))
+	local constColor = m.gc(terralib.new(Color1))
 	constColor:__construct(1.0)
-	local terra renderSegments(points: &Vector(Vec2d), sampler: &ImplicitSampler2d1d, pattern: &Vector(Vec2d))
+	local terra renderSegments(points: &Vector(Vec2), sampler: &Sampler, pattern: &Vector(Vec2d))
 		sampler:clear()
 		for i=0,points.size-1 do
-			var capsule = Capsule2d1d.heapAlloc(points:get(i), points:get(i+1), lineThickness)
-			var coloredCapsule = ConstColorShape2d1d.heapAlloc(capsule, constColor)
+			var capsule = Capsule.heapAlloc(points:get(i), points:get(i+1), lineThickness)
+			var coloredCapsule = ColoredShape.heapAlloc(capsule, constColor)
 			sampler:addShape(coloredCapsule)
 		end
 		sampler:sampleSharp(pattern)
@@ -273,8 +281,20 @@ end
 
 
 -- Probabilistic code for rendering with random circles
-local struct Circle { center: Vec2d, radius: double }
+local Circle = templatize(function(real)
+	local Vec2 = Vec(real, 2)
+	local struct CircleT { center: Vec2, radius: real }
+end)
 local function circlesModule()
+
+	local Vec2 = Vec(real, 2)
+	local Color1 = Color(real, 2)
+	local CircleT = Circle(real)
+	local SampledFunctionType = SampledFunction(Vec2d, Color1)
+	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
+	local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
+	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
+	local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
 
 	-- Shorthand for common non-structural ERPs
 	local nuniformWithFalloff = macro(function(lo, hi)
@@ -289,23 +309,23 @@ local function circlesModule()
 	local radMax = 0.1
 
 	local circles = pfn(terra()
-		var circs = [Vector(Circle)].stackAlloc(numCircles, Circle { Vec2d.stackAlloc(0.0), 1.0 } )
+		var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
 		for i=0,numCircles do
-			circs:getPointer(i).center = Vec2d.stackAlloc(nuniformWithFalloff(posMin, posMax),
+			circs:getPointer(i).center = Vec2.stackAlloc(nuniformWithFalloff(posMin, posMax),
 														  nuniformWithFalloff(posMin, posMax))
 			circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 		end
 		return circs
 	end)
 
-	local constColor = m.gc(terralib.new(Color1d))
+	local constColor = m.gc(terralib.new(Color1))
 	constColor:__construct(1.0)
-	local terra renderCircles(circs: &Vector(Circle), sampler: &ImplicitSampler2d1d, pattern: &Vector(Vec2d))
+	local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
 		sampler:clear()
 		for i=0,circs.size do
 			var c = circs:getPointer(i)
-			var cShape = Circle2d1d.heapAlloc(c.center, c.radius)
-			var coloredShape = ConstColorShape2d1d.heapAlloc(cShape, constColor)
+			var cShape = CircleShape.heapAlloc(c.center, c.radius)
+			var coloredShape = ColoredShape.heapAlloc(cShape, constColor)
 			sampler:addShape(coloredShape)
 		end
 		sampler:sampleSharp(pattern)
