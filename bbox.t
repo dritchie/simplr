@@ -4,6 +4,8 @@ local templatize = terralib.require("templatize")
 
 local BBox = templatize(function(VecT)
 
+	local real = VecT.RealType
+
 	local struct BBoxT { mins: VecT, maxs: VecT }
 
 	terra BBoxT:__construct(mins: VecT, maxs: VecT) : {}
@@ -23,6 +25,11 @@ local BBox = templatize(function(VecT)
 	terra BBoxT:expand(other: &BBoxT)
 		self.mins:minInPlace(other.mins)
 		self.maxs:maxInPlace(other.maxs)
+	end
+
+	terra BBoxT:expand(amount: real)
+		[VecT.foreach(`self.mins, function(x) return quote [x] = [x] - amount end end)]
+		[VecT.foreach(`self.maxs, function(x) return quote [x] = [x] + amount end end)]
 	end
 
 	terra BBoxT:contains(point: &VecT)

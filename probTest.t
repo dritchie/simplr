@@ -332,8 +332,8 @@ local function circlesModule()
 			var coloredShape = ColoredShape.heapAlloc(cShape, constColor)
 			sampler:addShape(coloredShape)
 		end
-		sampler:sampleSharp(pattern)
-		-- sampler:sampleSmooth(pattern, smoothing)
+		-- sampler:sampleSharp(pattern)
+		sampler:sampleSmooth(pattern, smoothing)
 	end
 
 	return
