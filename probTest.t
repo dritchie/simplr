@@ -284,13 +284,15 @@ end
 local Circle = templatize(function(real)
 	local Vec2 = Vec(real, 2)
 	local struct CircleT { center: Vec2, radius: real }
+	return CircleT
 end)
 local function circlesModule()
 
 	local Vec2 = Vec(real, 2)
-	local Color1 = Color(real, 2)
+	local Color1 = Color(real, 1)
 	local CircleT = Circle(real)
-	local SampledFunctionType = SampledFunction(Vec2d, Color1)
+	local SampledFunctionType = SampledFunction(Vec2d, Color1,
+		SfnOpts.ClampFns.SoftMin(10, 1.0), SfnOpts.AccumFns.Over())
 	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 	local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
 	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
@@ -307,6 +309,7 @@ local function circlesModule()
 	local posMax = 1.0
 	local radMin = 0.025
 	local radMax = 0.1
+	local smoothing = 0.005 	-- TODO: Make variable
 
 	local circles = pfn(terra()
 		var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
@@ -328,7 +331,8 @@ local function circlesModule()
 			var coloredShape = ColoredShape.heapAlloc(cShape, constColor)
 			sampler:addShape(coloredShape)
 		end
-		sampler:sampleSharp(pattern)
+		-- sampler:sampleSharp(pattern)
+		sampler:sampleSmooth(pattern, smoothing)
 	end
 
 	return
@@ -342,10 +346,10 @@ end
 
 ------------------
 
-local pmodule = polylineModule
-local targetImgName = "squiggle_200.png"
--- local pmodule = circlesModule
--- local targetImgName = "symbol_200.png"
+-- local pmodule = polylineModule
+-- local targetImgName = "squiggle_200.png"
+local pmodule = circlesModule
+local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
 
@@ -353,7 +357,7 @@ local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunct
 local program = bayesProgram(pmodule, lmodule)
 
 local kernel = RandomWalk()
-local numsamps = 1000
+local numsamps = 10
 local values = doMCMC(program, kernel, numsamps)
 
 renderVideo(lmodule, values, "renders", "movie")

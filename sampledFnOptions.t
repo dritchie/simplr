@@ -17,10 +17,10 @@ local ChannelFns =
 			local SrcTyp = src:gettype()
 			if SrcTyp:isintegral() and DstTyp:isfloat() then
 				local intmax = 2 ^ (terralib.sizeof(SrcTyp)*8) - 1
-				return quote [dst] = [src] / [DstTyp](intmax) end
+				return quote [dst] = ad.math.fmin([src], 1.0) / [DstTyp](intmax) end
 			elseif SrcTyp:isfloat() and DstTyp:isintegral() then
 				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8) - 1
-				return quote [dst] = [DstTyp]([src] * intmax) end
+				return quote [dst] = [DstTyp](ad.math.fmin([src], 1.0) * intmax) end
 			else
 				return quote [dst] = [DstTyp]([src]) end
 			end
