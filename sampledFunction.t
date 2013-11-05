@@ -7,6 +7,7 @@ local templatize = terralib.require("templatize")
 local inheritance = terralib.require("inheritance")
 local patterns = terralib.require("samplePatterns")
 local options = terralib.require("sampledFnOptions")
+local BBox = terralib.require("bbox")
 
 
 local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn)
@@ -54,14 +55,11 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 	end
 
 	terra SampledFunctionT:spatialBounds()
-		var mins = SpaceVec.stackAlloc([math.huge])
-		var maxs =SpaceVec.stackAlloc([-math.huge])
+		var bbox = [BBox(SpaceVec)].stackAlloc()
 		for i=0,self.samplingPattern.size do
-			var samplePoint = self.samplingPattern:get(i)
-			mins:minInPlace(samplePoint)
-			maxs:maxInPlace(samplePoint)
+			bbox:expand(self.samplingPattern:get(i))
 		end
-		return mins,maxs
+		return bbox
 	end
 
 	terra SampledFunctionT:setSamplingPattern(pattern: &SamplingPattern)

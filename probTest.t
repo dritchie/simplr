@@ -332,8 +332,8 @@ local function circlesModule()
 			var coloredShape = ColoredShape.heapAlloc(cShape, constColor)
 			sampler:addShape(coloredShape)
 		end
-		-- sampler:sampleSharp(pattern)
-		sampler:sampleSmooth(pattern, smoothing)
+		sampler:sampleSharp(pattern)
+		-- sampler:sampleSmooth(pattern, smoothing)
 	end
 
 	return
@@ -358,7 +358,7 @@ local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunct
 local program = bayesProgram(pmodule, lmodule)
 
 local kernel = RandomWalk()
-local numsamps = 100
+local numsamps = 1000
 local values = doMCMC(program, kernel, numsamps)
 
 renderVideo(lmodule, values, "renders", "movie")

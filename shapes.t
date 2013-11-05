@@ -3,6 +3,7 @@ local m = terralib.require("mem")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local inheritance = terralib.require("inheritance")
+local BBox = terralib.require("bbox")
 
 
 -- TODO: If virtual function calls are too slow, we can handle the Shape hierarchy through
@@ -29,6 +30,7 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {&SpaceVec}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {&SpaceVec}->{real, ColorVec})
+	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBox(SpaceVec)})
 
 	return ImplicitShapeT
 
@@ -68,6 +70,11 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalueAndColor")
 
+	terra ConstantColorImplicitShapeT:bounds() : BBox(SpaceVec)
+		return self.innerShape:bounds()
+	end
+	inheritance.virtual(ConstantColorImplicitShapeT, "bounds")
+
 	m.addConstructors(ConstantColorImplicitShapeT)
 	return ConstantColorImplicitShapeT
 
@@ -76,6 +83,30 @@ end)
 
 -- TODO: For these concrete shapes, is it faster to use the generalized implicit formula
 --    or to tranform into a canonical one? Currently using generalized.
+
+local sphereBBox = templatize(function(VecT)
+	local real = VecT.RealType
+	local function genExpands(center, rad, bbox, tmp)
+		local stmts = {}
+		for i=0,VecT.Dimension-1 do
+			table.insert(stmts, quote
+				[tmp] = [center].entries[ [i] ]
+				[center].entries[ [i] ]  = [tmp] + rad
+				[bbox]:expand([center])
+				[center].entries[ [i] ]  = [tmp] - rad
+				[bbox]:expand([center])
+				[center].entries[ [i] ] = [tmp]
+			end)
+		end
+		return stmts
+	end
+	return terra(center: &VecT, rad: real)
+		var bbox = [BBox(VecT)].stackAlloc()
+		var tmp : real
+		[genExpands(center, rad, bbox, tmp)]
+		return bbox
+	end
+end)
 
 local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 
@@ -86,12 +117,14 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 	local struct SphereImplicitShapeT
 	{
 		center: SpaceVec,
+		r: real,
 		rSq: real
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, SphereImplicitShapeT)
 
 	terra SphereImplicitShapeT:__construct(center: SpaceVec, r: real)
 		self.center = center
+		self.r = r
 		self.rSq = r*r
 	end
 
@@ -99,6 +132,11 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 		return point:distSq(self.center) - self.rSq
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
+
+	terra SphereImplicitShapeT:bounds() : BBox(SpaceVec)
+		return [sphereBBox(SpaceVec)](&self.center, self.r)
+	end
+	inheritance.virtual(SphereImplicitShapeT, "bounds")
 
 	m.addConstructors(SphereImplicitShapeT)
 	return SphereImplicitShapeT
@@ -117,6 +155,7 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 	{
 		bot: SpaceVec,
 		top: SpaceVec,
+		r: real,
 		rSq: real,
 		topMinusBot: SpaceVec,
 		sqLen: real
@@ -128,6 +167,7 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 	terra CapsuleImplicitShapeT:__construct(bot: SpaceVec, top: SpaceVec, r: real)
 		self.bot = bot
 		self.top = top
+		self.r = r
 		self.rSq = r*r
 		self.topMinusBot = top - bot
 		self.sqLen = self.topMinusBot:normSq()
@@ -145,6 +185,13 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 		return point:distSq(proj) - self.rSq
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
+
+	terra CapsuleImplicitShapeT:bounds() : BBox(SpaceVec)
+		var bbox1 = [sphereBBox(SpaceVec)](&self.bot, self.r)
+		var bbox2 = [sphereBBox(SpaceVec)](&self.top, self.r)
+		bbox1:expand(bbox2)
+		return bbox1
+	end
 
 	m.addConstructors(CapsuleImplicitShapeT)
 	return CapsuleImplicitShapeT

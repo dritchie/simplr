@@ -43,7 +43,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	end
 
 	local function buildSampleFunction(smoothing)
-		local function loopBodySharp(self, index, isovalue, color)
+		local function accumSharp(self, index, isovalue, color)
 			return quote
 				if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end
 				-- if [isovalue] <= 0.0 then
@@ -53,7 +53,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				-- end
 			end
 		end
-		local function loopBodySmooth(self, index, isovalue, color, smoothParam)
+		local function accumSmooth(self, index, isovalue, color, smoothParam)
 			-- TODO: Fast approximation to exp?
 			return quote
 				if [isovalue] < -[smoothParam]*logSmoothAlphaThresh then
@@ -70,13 +70,17 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		return terra([params])
 			[self].sampledFn:setSamplingPattern([pattern])
 			-- TODO: More efficient than O(#samples*#shapes)
-			for sampi=0,[pattern].size do
-				var samplePoint = [pattern]:getPointer(sampi)
-				for shapei=0,[self].shapes.size do
-					var shape = [self].shapes:get(shapei)
-					var isovalue, color = shape:isovalueAndColor(samplePoint)
-					[smoothing and loopBodySmooth(self, sampi, isovalue, color, smoothParam) or
-								   loopBodySharp(self, sampi, isovalue, color)]
+			for shapei=0,[self].shapes.size do
+				var shape = [self].shapes:get(shapei)
+				-- var bounds = shape:bounds()
+				-- TODO: Expand bounds if needed...
+				for sampi=0,[pattern].size do
+					var samplePoint = [pattern]:getPointer(sampi)
+					-- if bounds:contains(samplePoint) then
+						var isovalue, color = shape:isovalueAndColor(samplePoint)
+						[smoothing and accumSmooth(self, sampi, isovalue, color, smoothParam) or
+									   accumSharp(self, sampi, isovalue, color)]
+					-- end
 				end
 			end
 		end

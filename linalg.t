@@ -149,6 +149,33 @@ Vec = templatize(function(real, dim)
 	end
 	util.inline(VecT.metamethods.__unm)
 
+	-- Comparison operators
+	VecT.metamethods.__eq = terra(v1: VecT, v2: VecT)
+		return [reduce(zip(entryList(v1), entryList(v2),
+						   function(a,b) return `a == b end),
+					   function(a,b) return `a and b end)]
+	end
+	VecT.metamethods.__gt = terra(v1: VecT, v2: VecT)
+		return [reduce(zip(entryList(v1), entryList(v2),
+						   function(a,b) return `a > b end),
+					   function(a,b) return `a and b end)]
+	end
+	VecT.metamethods.__ge = terra(v1: VecT, v2: VecT)
+		return [reduce(zip(entryList(v1), entryList(v2),
+						   function(a,b) return `a >= b end),
+					   function(a,b) return `a and b end)]
+	end
+	VecT.metamethods.__lt = terra(v1: VecT, v2: VecT)
+		return [reduce(zip(entryList(v1), entryList(v2),
+						   function(a,b) return `a < b end),
+					   function(a,b) return `a and b end)]
+	end
+	VecT.metamethods.__le = terra(v1: VecT, v2: VecT)
+		return [reduce(zip(entryList(v1), entryList(v2),
+						   function(a,b) return `a <= b end),
+					   function(a,b) return `a and b end)]
+	end
+
 	-- Other mathematical operations
 	terra VecT:dot(v: VecT)
 		return [reduce(zip(entryList(self), entryList(v), function(a,b) return `a*b end),
