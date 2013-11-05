@@ -89,8 +89,8 @@ local function loadTargetImage(filename)
 	return {target = target, width = width, height = height}
 end
 
--- Probabilistic program for random polylines.
-local function polylineProgram(targetData)
+-- Probabilistic code for random polylines.
+local function polylineModule(targetData)
 	local target = targetData.target
 	return function()
 
@@ -194,39 +194,38 @@ local function polylineProgram(targetData)
 end
 
 
--- Actual program we do inference over
-local function constrainedProgram(program)
+-- Make a bayesian inference program
+local function bayesProgram(pmodule)
 	return function()
-		local p = program()
+		local M = pmodule()
 		return terra()
-			var structure = p.prior()
-			factor(p.likelihood(&structure))
+			var structure = M.prior()
+			factor(M.likelihood(&structure))
 			return structure
 		end
 	end
 end
 
 -- Do inference
-local kernel = RandomWalk()
-local numsamps = 1000
-local function doInference(program)
+local function doMCMC(program, kernel, numsamps, verbose)
+	if verbose == nil then verbose = true end
 	local terra fn()
-		return [mcmc(program, kernel, {numsamps=numsamps, verbose=true})]
+		return [mcmc(program, kernel, {numsamps=numsamps, verbose=verbose})]
 	end
 	return m.gc(fn())
 end
 
 
 -- Render a video of the sequence of accepted states
-local function renderVideo(prog, samps, directory, name)
+local function renderVideo(pmodule, samps, directory, name)
 	io.write("Rendering video...")
 	io.flush()
 	local moviefilename = string.format("%s/%s.mp4", directory, name)
 	local framebasename = directory .. "/movieframe_%06d.png"
 	local framewildcard = directory .. "/movieframe_*.png"
-	local p = prog()
-	local width = p.targetData.width
-	local height = p.targetData.height
+	local M = pmodule()
+	local width = M.targetData.width
+	local height = M.targetData.height
 	local function renderFrames(samps, basename)
 		return quote
 			var framename : int8[1024]
@@ -235,7 +234,7 @@ local function renderVideo(prog, samps, directory, name)
 			var ones = Vec2d.stackAlloc(1.0)
 			for i=0,[samps].size do
 				var samp = [samps]:getPointer(i)
-				var renderedSamples = p.render(&samp.value)
+				var renderedSamples = M.render(&samp.value)
 				[SampledFunction2d1d.saveToImage(RGBImage)](renderedSamples, &image, zeros, ones)
 				C.sprintf(framename, [basename], i)
 				image:save(im.Format.PNG, framename)
@@ -253,9 +252,12 @@ end
 
 ------------------
 
-local program = polylineProgram(loadTargetImage("squiggle_200.png"))
-local samps = doInference(constrainedProgram(program))
-renderVideo(program, samps, "renders", "movie")
+local kernel = RandomWalk()
+local numsamps = 1000
+
+local pmodule = polylineModule(loadTargetImage("squiggle_200.png"))
+local samps = doMCMC(bayesProgram(pmodule), kernel, numsamps)
+renderVideo(pmodule, samps, "renders", "movie")
 
 
 
