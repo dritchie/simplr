@@ -6,6 +6,12 @@ local templatize = terralib.require("templatize")
 local ad = terralib.require("ad")
 
 
+-- Skip sampling shapes at locations where the resulting alpha
+--    would be less than this threshold
+local smoothAlphaThresh = 0.02
+local logSmoothAlphaThresh = math.log(smoothAlphaThresh)
+
+
 local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
 	assert(SampledFunctionT.ColorVec == Shape.ColorVec)
@@ -38,13 +44,22 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
 	local function buildSampleFunction(smoothing)
 		local function loopBodySharp(self, index, isovalue, color)
-			return quote if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end end
+			return quote
+				if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end
+				-- if [isovalue] <= 0.0 then
+				-- 	[self].sampledFn:accumulateSample([index], [color], 1.0)
+				-- else
+				-- 	[self].sampledFn:accumulateSample([index], [color], 0.0)
+				-- end
+			end
 		end
 		local function loopBodySmooth(self, index, isovalue, color, smoothParam)
 			-- TODO: Fast approximation to exp?
-			return quote 
-				var alpha = ad.math.exp(-[isovalue] / [smoothParam])
-				[self].sampledFn:accumulateSample([index], [color], alpha)
+			return quote
+				if [isovalue] < -[smoothParam]*logSmoothAlphaThresh then
+					var alpha = ad.math.exp(-[isovalue] / [smoothParam])
+					[self].sampledFn:accumulateSample([index], [color], alpha)
+				end
 			end
 		end
 		local self = symbol(&ImplicitSamplerT, "self")
@@ -58,7 +73,8 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 			for sampi=0,[pattern].size do
 				var samplePoint = [pattern]:getPointer(sampi)
 				for shapei=0,[self].shapes.size do
-					var isovalue, color = [self].shapes:get(shapei):isovalueAndColor(samplePoint)
+					var shape = [self].shapes:get(shapei)
+					var isovalue, color = shape:isovalueAndColor(samplePoint)
 					[smoothing and loopBodySmooth(self, sampi, isovalue, color, smoothParam) or
 								   loopBodySharp(self, sampi, isovalue, color)]
 				end

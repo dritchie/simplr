@@ -291,8 +291,9 @@ local function circlesModule()
 	local Vec2 = Vec(real, 2)
 	local Color1 = Color(real, 1)
 	local CircleT = Circle(real)
-	local SampledFunctionType = SampledFunction(Vec2d, Color1,
-		SfnOpts.ClampFns.SoftMin(10, 1.0), SfnOpts.AccumFns.Over())
+	local SampledFunctionType = SampledFunction(Vec2d, Color1
+		,SfnOpts.ClampFns.SoftMin(20, 1.0), SfnOpts.AccumFns.Over()
+	)
 	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 	local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
 	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
@@ -357,7 +358,7 @@ local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunct
 local program = bayesProgram(pmodule, lmodule)
 
 local kernel = RandomWalk()
-local numsamps = 10
+local numsamps = 100
 local values = doMCMC(program, kernel, numsamps)
 
 renderVideo(lmodule, values, "renders", "movie")
