@@ -19,6 +19,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		shapes: Vector(&Shape),
 		sampledFn: &SampledFunctionT
 	}
+	ImplicitSamplerT.SampledFunctionType = SampledFunctionT
 
 	terra ImplicitSamplerT:__construct(sampledFn: &SampledFunctionT)
 		m.init(self.shapes)
