@@ -32,8 +32,8 @@ local BBox = templatize(function(VecT)
 		[VecT.foreach(`self.maxs, function(x) return quote [x] = [x] + amount end end)]
 	end
 
-	terra BBoxT:contains(point: &VecT)
-		return @point > self.mins and @point < self.maxs
+	terra BBoxT:contains(point: VecT)
+		return point > self.mins and point < self.maxs
 	end
 
 	m.addConstructors(BBoxT)

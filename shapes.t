@@ -28,8 +28,8 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 	terra ImplicitShapeT:__destruct() : {} end
 	inheritance.virtual(ImplicitShapeT, "__destruct")
 
-	inheritance.purevirtual(ImplicitShapeT, "isovalue", {&SpaceVec}->{real})
-	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {&SpaceVec}->{real, ColorVec})
+	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
+	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
 	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBox(SpaceVec)})
 
 	return ImplicitShapeT
@@ -60,12 +60,12 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "__destruct")
 
-	terra ConstantColorImplicitShapeT:isovalue(point: &SpaceVec) : real
+	terra ConstantColorImplicitShapeT:isovalue(point: SpaceVec) : real
 		return self.innerShape:isovalue(point)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue")
 
-	terra ConstantColorImplicitShapeT:isovalueAndColor(point: &SpaceVec) : {real, ColorVec}
+	terra ConstantColorImplicitShapeT:isovalueAndColor(point: SpaceVec) : {real, ColorVec}
 		return self.innerShape:isovalue(point), self.color
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalueAndColor")
@@ -128,7 +128,7 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 		self.rSq = r*r
 	end
 
-	terra SphereImplicitShapeT:isovalue(point: &SpaceVec) : real
+	terra SphereImplicitShapeT:isovalue(point: SpaceVec) : real
 		return point:distSq(self.center) - self.rSq
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
@@ -175,8 +175,8 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	local C = terralib.includec("stdio.h")
 
-	terra CapsuleImplicitShapeT:isovalue(point: &SpaceVec) : real
-		var t = (@point - self.bot):dot(self.topMinusBot) / self.sqLen
+	terra CapsuleImplicitShapeT:isovalue(point: SpaceVec) : real
+		var t = (point - self.bot):dot(self.topMinusBot) / self.sqLen
 		-- Beyond the ends of the cylinder; treat as semispherical caps
 		if t < 0.0 then return point:distSq(self.bot) - self.rSq end
 		if t > 1.0 then return point:distSq(self.top) - self.rSq end

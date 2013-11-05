@@ -163,7 +163,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 	-- Process samples in lock-step with samples from an identical sampling
 	--    pattern (but possibly of a different type)
 	SampledFunctionT.lockstep = templatize(
-	function(SampledFunctionT2, processingFn)
+	function(SampledFunctionT2, processingMacro)
 		assert(SampledFunctionT.SpaceVec.Dimension == SampledFunctionT2.SpaceVec.Dimension)
 		return macro(function(self, fn2)
 			assert(self:gettype() == &SampledFunctionT)
@@ -175,7 +175,7 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 				for i=0,self.samplingPattern.size do
 					var s1 = self.samples:getPointer(i)
 					var s2 = fn2.samples:getPointer(i)
-					[processingFn(s1, s2)]
+					processingMacro(s1, s2)
 				end
 			end
 		end)

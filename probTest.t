@@ -77,9 +77,9 @@ local mse = macro(function(fnPointer1, fnPointer2)
 	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
 	local accumType = SampledFunctionT1.ColorVec.RealType
 	local function makeProcessFn(accum)
-		return function(color1, color2)
+		return macro(function(color1, color2)
 			return quote [accum] = [accum] + [color1]:distSq(@[color2]) end
-		end 
+		end) 
 	end
 	return quote
 		var accum : accumType = 0.0
@@ -259,13 +259,11 @@ local function polylineModule()
 
 	-- Rendering polyline (used by likelihood module)
 	local lineThickness = 0.015
-	local constColor = m.gc(terralib.new(Color1))
-	constColor:__construct(1.0)
 	local terra renderSegments(points: &Vector(Vec2), sampler: &Sampler, pattern: &Vector(Vec2d))
 		sampler:clear()
 		for i=0,points.size-1 do
 			var capsule = Capsule.heapAlloc(points:get(i), points:get(i+1), lineThickness)
-			var coloredCapsule = ColoredShape.heapAlloc(capsule, constColor)
+			var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
 			sampler:addShape(coloredCapsule)
 		end
 		sampler:sampleSharp(pattern)
@@ -316,20 +314,18 @@ local function circlesModule()
 		var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
 		for i=0,numCircles do
 			circs:getPointer(i).center = Vec2.stackAlloc(nuniformWithFalloff(posMin, posMax),
-														  nuniformWithFalloff(posMin, posMax))
+														 nuniformWithFalloff(posMin, posMax))
 			circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 		end
 		return circs
 	end)
 
-	local constColor = m.gc(terralib.new(Color1))
-	constColor:__construct(1.0)
 	local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
 		sampler:clear()
 		for i=0,circs.size do
 			var c = circs:getPointer(i)
 			var cShape = CircleShape.heapAlloc(c.center, c.radius)
-			var coloredShape = ColoredShape.heapAlloc(cShape, constColor)
+			var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
 			sampler:addShape(coloredShape)
 		end
 		-- sampler:sampleSharp(pattern)
@@ -357,7 +353,8 @@ local constraintStrength = 2000
 local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
-local kernel = RandomWalk()
+-- local kernel = RandomWalk()
+local kernel = HMC()
 local numsamps = 1000
 local values = doMCMC(program, kernel, numsamps)
 
