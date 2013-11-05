@@ -1,7 +1,6 @@
 -- Include Quicksand
 terralib.require("prob")
 
-
 local m = terralib.require("mem")
 local util = terralib.require("util")
 local templatize = terralib.require("templatize")
@@ -26,6 +25,7 @@ local ImgGridPattern = patterns.RegularGridSamplingPattern(Vec2d)
 local shapes = terralib.require("shapes")
 local Shape2d1d = shapes.ImplicitShape(Vec2d, Color1d)
 local Capsule2d1d = shapes.CapsuleImplicitShape(Vec2d, Color1d)
+local Circle2d1d = shapes.SphereImplicitShape(Vec2d, Color1d)
 local ConstColorShape2d1d = shapes.ConstantColorImplicitShape(Vec2d, Color1d)
 
 local SfnOpts = terralib.require("sampledFnOptions")
@@ -216,6 +216,7 @@ local function polylineModule()
 	end
 
 	-- A bunch of constants. Perhaps factor these out?
+	-- TODO: Replace gammas with uniformWithFalloff
 	local numSegs = 40
 	local startPosPriorMean = 0.5
 	local startPosPriorSD = 0.25
@@ -272,10 +273,64 @@ local function polylineModule()
 end
 
 
+-- Probabilistic code for rendering with random circles
+local struct Circle { center: Vec2d, radius: double }
+local function circlesModule()
+
+	-- Shorthand for common non-structural ERPs
+	local ngaussian = macro(function(mean, sd)
+		return `gaussian([mean], [sd], {structural=false})
+	end)
+	local nuniformWithFalloff = macro(function(lo, hi)
+		return `uniformWithFalloff([lo], [hi], {structural=false})
+	end)
+
+	-- Constants
+	local numCircles = 40
+	local posMin = 0.0
+	local posMax = 1.0
+	local radMin = 0.025
+	local radMax = 0.1
+
+	local circles = pfn(terra()
+		var circs = [Vector(Circle)].stackAlloc(numCircles, Circle { Vec2d.stackAlloc(0.0), 1.0 } )
+		for i=0,numCircles do
+			circs:getPointer(i).center = Vec2d.stackAlloc(nuniformWithFalloff(posMin, posMax),
+														  nuniformWithFalloff(posMin, posMax))
+			circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
+		end
+		return circs
+	end)
+
+	local constColor = m.gc(terralib.new(Color1d))
+	constColor:__construct(1.0)
+	local terra renderCircles(circs: &Vector(Circle), sampler: &ImplicitSampler2d1d, pattern: &Vector(Vec2d))
+		sampler:clear()
+		for i=0,circs.size do
+			var c = circs:getPointer(i)
+			var cShape = Circle2d1d.heapAlloc(c.center, c.radius)
+			var coloredShape = ConstColorShape2d1d.heapAlloc(cShape, constColor)
+			sampler:addShape(coloredShape)
+		end
+		sampler:sampleSharp(pattern)
+	end
+
+	return
+	{
+		prior = circles, 
+		sample = renderCircles
+	}
+	
+end
+
+
 ------------------
 
-local pmodule = polylineModule
-local targetImgName = "squiggle_200.png"
+-- local pmodule = polylineModule
+-- local targetImgName = "squiggle_200.png"
+local pmodule = circlesModule
+local targetImgName = "symbol_200.png"
+
 local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName))
 local program = bayesProgram(pmodule, lmodule)
 
