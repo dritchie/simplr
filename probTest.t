@@ -203,8 +203,8 @@ local function polylineModule()
 	local ngaussian = macro(function(mean, sd)
 		return `gaussian([mean], [sd], {structural=false})
 	end)
-	local ngamma = macro(function(alpha, beta)
-		return `gamma([alpha], [beta], {structural=false})
+	local nuniformWithFalloff = macro(function(lo, hi)
+		return `uniformWithFalloff([lo], [hi], {structural=false})
 	end)
 
 	local terra rotate(dir: Vec2d, angle: double)
@@ -216,26 +216,25 @@ local function polylineModule()
 	end
 
 	-- A bunch of constants. Perhaps factor these out?
-	-- TODO: Replace gammas with uniformWithFalloff
 	local numSegs = 40
-	local startPosPriorMean = 0.5
-	local startPosPriorSD = 0.25
-	local startDirPriorMean = 0.0
-	local startDirPriorSD = math.pi/3.0
-	local lengthPriorAlpha = 0.5
-	local lengthPriorBeta = 0.1
+	local startPosMin = 0.0
+	local startPosMax = 1.0
+	local startDirMin = 0.0
+	local startDirMax = 2.0*math.pi
+	local lengthMin = 0.01
+	local lengthMax = 0.1
 	local anglePriorMean = 0.0
 	local anglePriorSD = math.pi/6.0
 
 	-- The 'prior' part of the program which generates the polyine to be rendered.
 	local polyline = pfn(terra()
 		var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
-		points:getPointer(0).entries[0] = ngaussian(startPosPriorMean, startPosPriorSD)
-		points:getPointer(0).entries[1] = ngaussian(startPosPriorMean, startPosPriorSD)
-		var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), ngaussian(startDirPriorMean, startDirPriorSD))
+		points:getPointer(0).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
+		points:getPointer(0).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
+		var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
 		var len = 0.0
 		for i=1,numSegs do
-			len = ngamma(lengthPriorAlpha, lengthPriorBeta)
+			len = nuniformWithFalloff(lengthMin, lengthMax)
 			dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
 			points:set(i, points:get(i-1) + (len*dir))
 		end
@@ -278,9 +277,6 @@ local struct Circle { center: Vec2d, radius: double }
 local function circlesModule()
 
 	-- Shorthand for common non-structural ERPs
-	local ngaussian = macro(function(mean, sd)
-		return `gaussian([mean], [sd], {structural=false})
-	end)
 	local nuniformWithFalloff = macro(function(lo, hi)
 		return `uniformWithFalloff([lo], [hi], {structural=false})
 	end)
@@ -326,12 +322,14 @@ end
 
 ------------------
 
--- local pmodule = polylineModule
--- local targetImgName = "squiggle_200.png"
-local pmodule = circlesModule
-local targetImgName = "symbol_200.png"
+local pmodule = polylineModule
+local targetImgName = "squiggle_200.png"
+-- local pmodule = circlesModule
+-- local targetImgName = "symbol_200.png"
 
-local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName))
+local constraintStrength = 2000
+
+local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
 local kernel = RandomWalk()
