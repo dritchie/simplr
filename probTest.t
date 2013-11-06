@@ -284,61 +284,62 @@ local Circle = templatize(function(real)
 	local struct CircleT { center: Vec2, radius: real }
 	return CircleT
 end)
-local function circlesModule()
-
-	local Vec2 = Vec(real, 2)
-	local Color1 = Color(real, 1)
-	local CircleT = Circle(real)
-	local SampledFunctionType = SampledFunction(Vec2d, Color1
-		-- ,SfnOpts.ClampFns.SoftMin(20, 1.0), SfnOpts.AccumFns.Over()
-		,SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over()
-	)
-	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
-	local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
-	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
-	local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
-
-	-- Shorthand for common non-structural ERPs
-	local nuniformWithFalloff = macro(function(lo, hi)
-		return `uniformWithFalloff([lo], [hi], {structural=false})
-	end)
-
-	-- Constants
-	local numCircles = 40
-	local posMin = 0.0
-	local posMax = 1.0
-	local radMin = 0.025
-	local radMax = 0.1
-	local smoothing = 0.005 	-- TODO: Make variable
-
-	local circles = pfn(terra()
-		var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
-		for i=0,numCircles do
-			circs:getPointer(i).center = Vec2.stackAlloc(nuniformWithFalloff(posMin, posMax),
-														 nuniformWithFalloff(posMin, posMax))
-			circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
+local function circlesModule(doSmoothing)
+	return function()
+		local Vec2 = Vec(real, 2)
+		local Color1 = Color(real, 1)
+		local CircleT = Circle(real)
+		local SampledFunctionType = nil
+		if doSmoothing then
+			SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
+		else
+			SampledFunctionType = SampledFunction(Vec2d, Color1)
 		end
-		return circs
-	end)
+		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
+		local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
+		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
+		local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
 
-	local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
-		sampler:clear()
-		for i=0,circs.size do
-			var c = circs:getPointer(i)
-			var cShape = CircleShape.heapAlloc(c.center, c.radius)
-			var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
-			sampler:addShape(coloredShape)
+		-- Shorthand for common non-structural ERPs
+		local nuniformWithFalloff = macro(function(lo, hi)
+			return `uniformWithFalloff([lo], [hi], {structural=false})
+		end)
+
+		-- Constants
+		local numCircles = 40
+		local posMin = 0.0
+		local posMax = 1.0
+		local radMin = 0.025
+		local radMax = 0.1
+		local smoothing = 0.005 	-- TODO: Make variable
+
+		local circles = pfn(terra()
+			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
+			for i=0,numCircles do
+				circs:getPointer(i).center = Vec2.stackAlloc(nuniformWithFalloff(posMin, posMax),
+															 nuniformWithFalloff(posMin, posMax))
+				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
+			end
+			return circs
+		end)
+
+		local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
+			sampler:clear()
+			for i=0,circs.size do
+				var c = circs:getPointer(i)
+				var cShape = CircleShape.heapAlloc(c.center, c.radius)
+				var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
+				sampler:addShape(coloredShape)
+			end
+			[doSmoothing and (`sampler:sampleSmooth(pattern, smoothing)) or (`sampler:sampleSharp(pattern))]
 		end
-		-- sampler:sampleSharp(pattern)
-		sampler:sampleSmooth(pattern, smoothing)
+
+		return
+		{
+			prior = circles, 
+			sample = renderCircles
+		}
 	end
-
-	return
-	{
-		prior = circles, 
-		sample = renderCircles
-	}
-	
 end
 
 
@@ -346,7 +347,7 @@ end
 
 -- local pmodule = polylineModule
 -- local targetImgName = "squiggle_200.png"
-local pmodule = circlesModule
+local pmodule = circlesModule(true)
 local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
