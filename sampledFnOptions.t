@@ -124,6 +124,7 @@ local ClampFns =
 	None = function() return macro(function(color) return color end) end,
 	Min = function(maxval)
 		if maxval == nil then maxval = 1.0 end
+		maxval = `[double](maxval)
 		return macro(function(color)
 			local VecT = color:gettype()
 			return `[VecT.map(color, function(ce) return `ad.math.fmin([ce], maxval) end)]

@@ -33,7 +33,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	end
 
 	terra ImplicitSamplerT:__destruct()
-		self:clear()
+		self:clearShapes()
 		m.destruct(self.shapes)
 	end
 
