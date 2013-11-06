@@ -304,6 +304,9 @@ local function circlesModule(doSmoothing)
 		local nuniformWithFalloff = macro(function(lo, hi)
 			return `uniformWithFalloff([lo], [hi], {structural=false})
 		end)
+		local ngamma = macro(function(a, b)
+			return `gamma([a], [b], {structural=false})
+		end)
 
 		-- Constants
 		local numCircles = 40
@@ -311,7 +314,9 @@ local function circlesModule(doSmoothing)
 		local posMax = 1.0
 		local radMin = 0.025
 		local radMax = 0.1
-		local smoothing = 0.005 	-- TODO: Make variable
+		local smoothing = 0.005
+		local smoothAlpha = 2
+		local smoothBeta = 0.01
 
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
@@ -323,6 +328,11 @@ local function circlesModule(doSmoothing)
 			return circs
 		end)
 
+		local smoothingParams = nil
+		if doSmoothing then
+			smoothingParams = m.gc(terralib.new(Vector(real)))
+		end
+		smoothingParams:__construct()
 		local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
 			sampler:clear()
 			for i=0,circs.size do
@@ -331,7 +341,15 @@ local function circlesModule(doSmoothing)
 				var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
 				sampler:addShape(coloredShape)
 			end
-			[doSmoothing and (`sampler:sampleSmooth(pattern, smoothing)) or (`sampler:sampleSharp(pattern))]
+			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or 
+			quote
+				smoothingParams:resize(numCircles)
+				for i=0,numCircles do
+					-- smoothingParams:set(i, ngamma(smoothAlpha, smoothBeta))
+					smoothingParams:set(i, smoothing)
+				end
+				sampler:sampleSmooth(pattern, &smoothingParams)
+			end]
 		end
 
 		return

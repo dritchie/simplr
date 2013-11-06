@@ -61,21 +61,21 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		end
 		local self = symbol(&ImplicitSamplerT, "self")
 		local pattern = symbol(&SamplingPattern, "pattern")
-		local smoothParam = symbol(real, "smoothParam")
+		local smoothParams = symbol(&Vector(real), "smoothParams")
 		local params = {self, pattern}
-		if smoothing then table.insert(params, smoothParam) end
+		if smoothing then table.insert(params, smoothParams) end
 		return terra([params])
 			[self].sampledFn:setSamplingPattern([pattern])
 			-- TODO: More efficient than O(#samples*#shapes)
 			for shapei=0,[self].shapes.size do
 				var shape = [self].shapes:get(shapei)
 				var bounds = shape:bounds()
-				[smoothing and expandBounds(bounds, smoothParam) or quote end]
+				[smoothing and expandBounds(bounds, `smoothParams:get(shapei)) or quote end]
 				for sampi=0,[pattern].size do
 					var samplePoint = [pattern]:getPointer(sampi)
 					if bounds:contains(@samplePoint) then
 						var isovalue, color = shape:isovalueAndColor(@samplePoint)
-						[smoothing and accumSmooth(self, sampi, isovalue, color, smoothParam) or
+						[smoothing and accumSmooth(self, sampi, isovalue, color, `smoothParams:get(shapei)) or
 									   accumSharp(self, sampi, isovalue, color)]
 					end
 				end
