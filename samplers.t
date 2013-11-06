@@ -49,7 +49,6 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 			end
 		end
 		local function accumSmooth(self, index, isovalue, color, smoothParam)
-			-- TODO: Fast approximation to exp?
 			return quote
 				if [isovalue] < -[smoothParam]*logSmoothAlphaThresh then
 					var alpha = ad.math.exp(-[isovalue] / [smoothParam])
