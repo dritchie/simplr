@@ -66,7 +66,6 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		if smoothing then table.insert(params, smoothParams) end
 		return terra([params])
 			[self].sampledFn:setSamplingPattern([pattern])
-			-- TODO: More efficient than O(#samples*#shapes)
 			for shapei=0,[self].shapes.size do
 				var shape = [self].shapes:get(shapei)
 				var bounds = shape:bounds()

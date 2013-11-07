@@ -278,12 +278,36 @@ local function polylineModule()
 end
 
 
+
+
 -- Probabilistic code for rendering with random circles
+
 local Circle = templatize(function(real)
 	local Vec2 = Vec(real, 2)
 	local struct CircleT { center: Vec2, radius: real }
 	return CircleT
 end)
+
+-- Super annoying, but if I want to be able to render things exactly as they looked during inference,
+--    I need to package up the smoothing params in the return value of the computation.
+local CirclesRetType = templatize(function(real)
+	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParams: Vector(real) }
+	terra CircleRetTypeT:__construct() m.init(self.circles); m.init(self.smoothParams) end
+	terra CircleRetTypeT:__construct(c: Vector(Circle(real)), s: Vector(real))
+		self.circles = c; self.smoothParams = s
+	end
+	terra CircleRetTypeT:__copy(other: &CircleRetTypeT)
+		self.circles = m.copy(other.circles)
+		self.smoothParams = m.copy(other.smoothParams)
+	end
+	terra CircleRetTypeT:__destruct()
+		m.destruct(self.circles)
+		m.destruct(self.smoothParams)
+	end
+	m.addConstructors(CircleRetTypeT)
+	return CircleRetTypeT
+end)
+
 local function circlesModule(doSmoothing)
 	return function()
 		local Vec2 = Vec(real, 2)
@@ -300,6 +324,8 @@ local function circlesModule(doSmoothing)
 		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
 		local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
 
+		local RetType = CirclesRetType(real)
+
 		-- Shorthand for common non-structural ERPs
 		local nuniformWithFalloff = macro(function(lo, hi)
 			return `uniformWithFalloff([lo], [hi], {structural=false})
@@ -314,8 +340,8 @@ local function circlesModule(doSmoothing)
 		local posMax = 1.0
 		local radMin = 0.025
 		local radMax = 0.1
-		local smoothing = 0.005
-		local smoothAlpha = 2
+		local smoothAlpha = 5.0
+		-- local smoothBeta = 0.001
 		local smoothBeta = 0.01
 
 		local circles = pfn(terra()
@@ -325,31 +351,28 @@ local function circlesModule(doSmoothing)
 															 nuniformWithFalloff(posMin, posMax))
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
-			return circs
+			var smoothParams = [Vector(real)].stackAlloc()
+			[(not doSmoothing) and quote end or
+			quote
+				smoothParams:resize(numCircles)
+				-- var smoothingAmount = 0.005
+				var smoothingAmount = ngamma(smoothAlpha, smoothBeta)
+				for i=0,numCircles do
+					smoothParams:set(i, smoothingAmount)
+				end
+			end]
+			return RetType.stackAlloc(circs, smoothParams)
 		end)
 
-		local smoothingParams = nil
-		if doSmoothing then
-			smoothingParams = m.gc(terralib.new(Vector(real)))
-		end
-		smoothingParams:__construct()
-		local terra renderCircles(circs: &Vector(CircleT), sampler: &Sampler, pattern: &Vector(Vec2d))
+		local terra renderCircles(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
 			sampler:clear()
-			for i=0,circs.size do
-				var c = circs:getPointer(i)
+			for i=0,retval.circles.size do
+				var c = retval.circles:getPointer(i)
 				var cShape = CircleShape.heapAlloc(c.center, c.radius)
 				var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
 				sampler:addShape(coloredShape)
 			end
-			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or 
-			quote
-				smoothingParams:resize(numCircles)
-				for i=0,numCircles do
-					-- smoothingParams:set(i, ngamma(smoothAlpha, smoothBeta))
-					smoothingParams:set(i, smoothing)
-				end
-				sampler:sampleSmooth(pattern, &smoothingParams)
-			end]
+			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, &retval.smoothParams))]
 		end
 
 		return
