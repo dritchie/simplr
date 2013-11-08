@@ -92,7 +92,7 @@ end)
 
 
 -- Likelihood module for calculating MSE with respect to a sampled target function
-local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength)
+local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime)
 	strength = strength or 1.0
 	local target = targetData.target
 	return function()
@@ -123,7 +123,10 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 		local terra likelihood(value: &ReturnType)
 			sample(value)
 			var err = mse(&samples, &target)
-			return -strength*err
+			var l = -strength*err
+			-- var l = (-strength*err)*inferenceTime
+			-- C.printf("\n%g\n", l)
+			return l
 		end
 
 		return 
@@ -312,8 +315,7 @@ local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
 end)
 
-local inferenceTime = global(double)
-local function circlesModule(doSmoothing)
+local function circlesModule(doSmoothing, inferenceTime)
 	return function()
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
@@ -391,21 +393,22 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 100
+local inferenceTime = global(double)
+local terra trackTimeSchedule(iter: uint)
+	inferenceTime = [double](iter) / numsamps
+end
 
 -- local pmodule = polylineModule
 -- local targetImgName = "squiggle_200.png"
-local pmodule = circlesModule(true)
+local pmodule = circlesModule(true, inferenceTime)
 local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
 
-local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
+local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength, inferenceTime)
 local program = bayesProgram(pmodule, lmodule)
 
-local terra trackTimeSchedule(iter: uint)
-	inferenceTime = [double](iter) / numsamps
-end
 
 -- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
