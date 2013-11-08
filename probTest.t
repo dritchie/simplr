@@ -43,6 +43,10 @@ local C = terralib.includecstring [[
 
 --------------
 
+local lerp = macro(function(lo, hi, t)
+	return `(1.0-t)*lo + t*hi
+end)
+
 
 -- Load up the target image. This only needs to be done once, since
 --    the type of this object is not dependent upon the 'real' type
@@ -93,7 +97,6 @@ end)
 
 -- Likelihood module for calculating MSE with respect to a sampled target function
 local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime)
-	strength = strength or 1.0
 	local target = targetData.target
 	return function()
 		local P = priorModuleWithSampling()
@@ -125,7 +128,6 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 			var err = mse(&samples, &target)
 			var l = -strength*err
 			-- var l = (-strength*err)*inferenceTime
-			-- C.printf("\n%g\n", l)
 			return l
 		end
 
@@ -294,25 +296,20 @@ end)
 -- Super annoying, but if I want to be able to render things exactly as they looked during inference,
 --    I need to package up the smoothing params in the return value of the computation.
 local CirclesRetType = templatize(function(real)
-	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParams: Vector(real) }
-	terra CircleRetTypeT:__construct() m.init(self.circles); m.init(self.smoothParams) end
-	terra CircleRetTypeT:__construct(c: Vector(Circle(real)), s: Vector(real))
-		self.circles = c; self.smoothParams = s
+	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParam: real }
+	terra CircleRetTypeT:__construct() m.init(self.circles) end
+	terra CircleRetTypeT:__construct(c: Vector(Circle(real)), s: real)
+		self.circles = c; self.smoothParam = s
 	end
 	terra CircleRetTypeT:__copy(other: &CircleRetTypeT)
 		self.circles = m.copy(other.circles)
-		self.smoothParams = m.copy(other.smoothParams)
+		self.smoothParam = other.smoothParam
 	end
 	terra CircleRetTypeT:__destruct()
 		m.destruct(self.circles)
-		m.destruct(self.smoothParams)
 	end
 	m.addConstructors(CircleRetTypeT)
 	return CircleRetTypeT
-end)
-
-local lerp = macro(function(lo, hi, t)
-	return `(1.0-t)*lo + t*hi
 end)
 
 local function circlesModule(doSmoothing, inferenceTime)
@@ -357,18 +354,14 @@ local function circlesModule(doSmoothing, inferenceTime)
 				circs:getPointer(i).center.entries[1] = nuniformWithFalloff(posMin, posMax)
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
-			var smoothParams = [Vector(real)].stackAlloc()
+			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
 			quote
-				smoothParams:resize(numCircles)
-				-- var smoothingAmount = 0.005
-				var smoothingAmount = lerp(0.01, 0.001, inferenceTime)
-				-- var smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
-				for i=0,numCircles do
-					smoothParams:set(i, smoothingAmount)
-				end
+				-- smoothingAmount = 0.005
+				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+				-- smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
 			end]
-			return RetType.stackAlloc(circs, smoothParams)
+			return RetType.stackAlloc(circs, smoothingAmount)
 		end)
 
 		local terra renderCircles(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
@@ -379,7 +372,7 @@ local function circlesModule(doSmoothing, inferenceTime)
 				var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
 				sampler:addShape(coloredShape)
 			end
-			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, &retval.smoothParams))]
+			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
 		end
 
 		return
