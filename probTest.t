@@ -346,8 +346,8 @@ local function circlesModule(doSmoothing)
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
 			for i=0,numCircles do
-				circs:getPointer(i).center = Vec2.stackAlloc(nuniformWithFalloff(posMin, posMax),
-															 nuniformWithFalloff(posMin, posMax))
+				circs:getPointer(i).center.entries[0] = nuniformWithFalloff(posMin, posMax)
+				circs:getPointer(i).center.entries[1] = nuniformWithFalloff(posMin, posMax)
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
 			var smoothParams = [Vector(real)].stackAlloc()
@@ -396,6 +396,7 @@ local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunct
 local program = bayesProgram(pmodule, lmodule)
 
 -- local kernel = RandomWalk()
+-- local kernel = ADRandomWalk()
 local kernel = HMC()
 local numsamps = 1000
 local values = doMCMC(program, kernel, numsamps)
