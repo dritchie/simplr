@@ -308,6 +308,11 @@ local CirclesRetType = templatize(function(real)
 	return CircleRetTypeT
 end)
 
+local lerp = macro(function(lo, hi, t)
+	return `(1.0-t)*lo + t*hi
+end)
+
+local inferenceTime = global(double)
 local function circlesModule(doSmoothing)
 	return function()
 		local Vec2 = Vec(real, 2)
@@ -354,7 +359,8 @@ local function circlesModule(doSmoothing)
 			[(not doSmoothing) and quote end or
 			quote
 				smoothParams:resize(numCircles)
-				var smoothingAmount = 0.005
+				-- var smoothingAmount = 0.005
+				var smoothingAmount = lerp(0.01, 0.001, inferenceTime)
 				-- var smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
 				for i=0,numCircles do
 					smoothParams:set(i, smoothingAmount)
@@ -385,6 +391,8 @@ end
 
 ------------------
 
+local numsamps = 1000
+
 -- local pmodule = polylineModule
 -- local targetImgName = "squiggle_200.png"
 local pmodule = circlesModule(true)
@@ -395,10 +403,14 @@ local constraintStrength = 2000
 local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
+local terra trackTimeSchedule(iter: uint)
+	inferenceTime = [double](iter) / numsamps
+end
+
 -- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
-local kernel = HMC()
-local numsamps = 1000
+-- local kernel = HMC()
+local kernel = Schedule(HMC(), trackTimeSchedule)
 local values = doMCMC(program, kernel, numsamps)
 
 renderVideo(lmodule, values, "renders", "movie")
