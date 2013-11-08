@@ -50,8 +50,11 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		end
 		local function accumSmooth(self, index, isovalue, color, smoothParam)
 			return quote
-				if [isovalue] < -[smoothParam]*logSmoothAlphaThresh then
-					var alpha = ad.math.exp(-[isovalue] / [smoothParam])
+				var sp = [smoothParam]
+				var spv = ad.val(sp)
+				var ivv = ad.val([isovalue])
+				if ivv < -spv*logSmoothAlphaThresh then
+					var alpha = ad.math.exp(-[isovalue] / sp)
 					[self].sampledFn:accumulateSample([index], [color], alpha)
 				end
 			end
