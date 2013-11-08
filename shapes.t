@@ -193,9 +193,10 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 	terra CapsuleImplicitShapeT:bounds() : BBoxT
 		var bbox1 = [sphereBBox(BVec)](ad.val(self.bot), ad.val(self.r))
 		var bbox2 = [sphereBBox(BVec)](ad.val(self.top), ad.val(self.r))
-		bbox1:expand(bbox2)
+		bbox1:expand(&bbox2)
 		return bbox1
 	end
+	inheritance.virtual(CapsuleImplicitShapeT, "bounds")
 
 	m.addConstructors(CapsuleImplicitShapeT)
 	return CapsuleImplicitShapeT

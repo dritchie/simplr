@@ -79,6 +79,12 @@ Vec = templatize(function(real, dim)
 		[entryList(self)] = [copyWrap(entryList(other))]
 	end
 
+	-- Apply metamethod does element access (as a macro, so you can both
+	--    read and write elements this way)
+	VecT.metamethods.__apply = macro(function(self, index)
+		return `self.entries[index]
+	end)
+
 	-- Casting vector types (e.g. Vec(float, 3) --> Vec(double, 3))
 	function VecT.metamethods.__cast(from, to, exp)
 		if (from.__generatorTemplate == Vec) and

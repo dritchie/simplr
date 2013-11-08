@@ -96,7 +96,7 @@ end)
 
 
 -- Likelihood module for calculating MSE with respect to a sampled target function
-local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime)
+local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength)
 	local target = targetData.target
 	return function()
 		local P = priorModuleWithSampling()
@@ -127,7 +127,6 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 			sample(value)
 			var err = mse(&samples, &target)
 			var l = -strength*err
-			-- var l = (-strength*err)*inferenceTime
 			return l
 		end
 
@@ -202,84 +201,110 @@ end
 
 
 -- Probabilistic code for random polylines.
-local function polylineModule()
 
+local PolyinesRetType = templatize(function(real)
 	local Vec2 = Vec(real, 2)
-	local Color1 = Color(real, 1)
-	local SampledFunctionType = SampledFunction(Vec2d, Color1)
-	local ShapeType = shapes.ImplicitShape(Vec2, Color1)
-	local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
-	local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
-	local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
-
-	-- Shorthand for common non-structural ERPs
-	local ngaussian = macro(function(mean, sd)
-		return `gaussian([mean], [sd], {structural=false})
-	end)
-	local nuniformWithFalloff = macro(function(lo, hi)
-		return `uniformWithFalloff([lo], [hi], {structural=false})
-	end)
-
-	local terra rotate(dir: Vec2, angle: real)
-		var x = dir.entries[0]
-		var y = dir.entries[1]
-		var cosang = ad.math.cos(angle)
-		var sinang = ad.math.sin(angle)
-		return Vec2.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
+	local struct PolyinesRetTypeT { points: Vector(Vec2), smoothParam: real }
+	terra PolyinesRetTypeT:__construct() m.init(self.points) end
+	terra PolyinesRetTypeT:__construct(p: Vector(Vec2), s: real)
+		self.points = p; self.smoothParam = s
 	end
-
-	-- A bunch of constants. Perhaps factor these out?
-	local numSegs = 40
-	local startPosMin = 0.0
-	local startPosMax = 1.0
-	local startDirMin = 0.0
-	local startDirMax = 2.0*math.pi
-	local lengthMin = 0.01
-	local lengthMax = 0.1
-	local anglePriorMean = 0.0
-	local anglePriorSD = math.pi/6.0
-
-	-- The 'prior' part of the program which generates the polyine to be rendered.
-	-- local polyline = pfn(terra()
-	-- 	var points = [Vector(Vec2d)].stackAlloc(numSegs, Vec2d.stackAlloc(0.0))
-	-- 	points:getPointer(0).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
-	-- 	points:getPointer(0).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
-	-- 	var dir = rotate(Vec2d.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
-	-- 	var len = 0.0
-	-- 	for i=1,numSegs do
-	-- 		len = nuniformWithFalloff(lengthMin, lengthMax)
-	-- 		dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
-	-- 		points:set(i, points:get(i-1) + (len*dir))
-	-- 	end
-	-- 	return points
-	-- end)
-	local polyline = pfn(terra()
-		var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
-		for i=0,numSegs do
-			points:getPointer(i).entries[0] = nuniformWithFalloff(startPosMin, startPosMax)
-			points:getPointer(i).entries[1] = nuniformWithFalloff(startPosMin, startPosMax)
-		end
-		return points
-	end)
-
-	-- Rendering polyline (used by likelihood module)
-	local lineThickness = 0.015
-	local terra renderSegments(points: &Vector(Vec2), sampler: &Sampler, pattern: &Vector(Vec2d))
-		sampler:clear()
-		for i=0,points.size-1 do
-			var capsule = Capsule.heapAlloc(points:get(i), points:get(i+1), lineThickness)
-			var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
-			sampler:addShape(coloredCapsule)
-		end
-		sampler:sampleSharp(pattern)
+	terra PolyinesRetTypeT:__copy(other: &PolyinesRetTypeT)
+		self.points = m.copy(other.points)
+		self.smoothParam = other.smoothParam
 	end
+	terra PolyinesRetTypeT:__destruct()
+		m.destruct(self.points)
+	end
+	m.addConstructors(PolyinesRetTypeT)
+	return PolyinesRetTypeT
+end)
 
-	-- Module exports
-	return
-	{
-		prior = polyline,
-		sample = renderSegments
-	}
+local function polylineModule(doSmoothing, inferenceTime)
+	return function()
+		local Vec2 = Vec(real, 2)
+		local Color1 = Color(real, 1)
+		local SampledFunctionType = nil
+		if doSmoothing then
+			SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
+		else
+			SampledFunctionType = SampledFunction(Vec2d, Color1)
+		end
+		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
+		local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
+		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
+		local Sampler = ImplicitSampler(SampledFunctionType, ShapeType)
+
+		local RetType = PolyinesRetType(real)
+
+		-- Shorthand for common non-structural ERPs
+		local ngaussian = macro(function(mean, sd)
+			return `gaussian([mean], [sd], {structural=false})
+		end)
+		local nuniformWithFalloff = macro(function(lo, hi)
+			return `uniformWithFalloff([lo], [hi], {structural=false})
+		end)
+
+		local terra rotate(dir: Vec2, angle: real)
+			var x = dir(0)
+			var y = dir(1)
+			var cosang = ad.math.cos(angle)
+			var sinang = ad.math.sin(angle)
+			return Vec2.stackAlloc(x*cosang - y*sinang, y*cosang + x*sinang)
+		end
+
+		-- A bunch of constants. Perhaps factor these out?
+		local numSegs = 40
+		local startPosMin = 0.0
+		local startPosMax = 1.0
+		local startDirMin = 0.0
+		local startDirMax = 2.0*math.pi
+		local lengthMin = 0.01
+		local lengthMax = 0.1
+		local anglePriorMean = 0.0
+		local anglePriorSD = math.pi/6.0
+		local lineThickness = 0.015
+
+		-- The 'prior' part of the program which generates the polyine to be rendered.
+		local polyline = pfn(terra()
+			var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
+			points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+			points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
+			var len : real = 0.0
+			for i=1,numSegs do
+				len = nuniformWithFalloff(lengthMin, lengthMax)
+				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
+				points:set(i, points:get(i-1) + (len*dir))
+				-- OK, I sort of lied. This isn't just a 'prior'-- I need some factors to keep the points
+				--    inside the image
+			end
+			var smoothingAmount : real
+			[(not doSmoothing) and quote end or
+			quote
+				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+			end]
+			return RetType.stackAlloc(points, smoothingAmount)
+		end)
+
+		-- Rendering polyline (used by likelihood module)
+		local terra renderSegments(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
+			sampler:clear()
+			for i=0,retval.points.size-1 do
+				var capsule = Capsule.heapAlloc(retval.points:get(i), retval.points:get(i+1), lineThickness)
+				var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
+				sampler:addShape(coloredCapsule)
+			end
+			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
+		end
+
+		-- Module exports
+		return
+		{
+			prior = polyline,
+			sample = renderSegments
+		}
+	end
 end
 
 
@@ -294,7 +319,7 @@ local Circle = templatize(function(real)
 end)
 
 -- Super annoying, but if I want to be able to render things exactly as they looked during inference,
---    I need to package up the smoothing params in the return value of the computation.
+--    I need to package up the smoothing param in the return value of the computation.
 local CirclesRetType = templatize(function(real)
 	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParam: real }
 	terra CircleRetTypeT:__construct() m.init(self.circles) end
@@ -350,8 +375,8 @@ local function circlesModule(doSmoothing, inferenceTime)
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
 			for i=0,numCircles do
-				circs:getPointer(i).center.entries[0] = nuniformWithFalloff(posMin, posMax)
-				circs:getPointer(i).center.entries[1] = nuniformWithFalloff(posMin, posMax)
+				circs:getPointer(i).center(0) = nuniformWithFalloff(posMin, posMax)
+				circs:getPointer(i).center(1) = nuniformWithFalloff(posMin, posMax)
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
 			var smoothingAmount : real
@@ -386,27 +411,27 @@ end
 
 ------------------
 
-local numsamps = 100
+local numsamps = 1000
 local inferenceTime = global(double)
 local terra trackTimeSchedule(iter: uint)
 	inferenceTime = [double](iter) / numsamps
 end
 
--- local pmodule = polylineModule
--- local targetImgName = "squiggle_200.png"
-local pmodule = circlesModule(true, inferenceTime)
-local targetImgName = "symbol_200.png"
+local pmodule = polylineModule(false, inferenceTime)
+local targetImgName = "squiggle_200.png"
+-- local pmodule = circlesModule(true, inferenceTime)
+-- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
 
-local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength, inferenceTime)
+local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
 
--- local kernel = RandomWalk()
+local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
 -- local kernel = HMC()
-local kernel = Schedule(HMC(), trackTimeSchedule)
+-- local kernel = Schedule(HMC(), trackTimeSchedule)
 local values = doMCMC(program, kernel, numsamps)
 
 renderVideo(lmodule, values, "renders", "movie")

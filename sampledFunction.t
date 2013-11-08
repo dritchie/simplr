@@ -130,8 +130,8 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 						dimMatchFn(sourceColor, &targetColor)
 						var oldSamplePoint = samplePoint
 						samplePoint = (samplePoint - mins) / range
-						var icoord = [uint](samplePoint.entries[0] * w)
-						var jcoord = [uint](samplePoint.entries[1] * h)
+						var icoord = [uint](samplePoint(0) * w)
+						var jcoord = [uint](samplePoint(1) * h)
 						image:setPixelColor(icoord, jcoord, targetColor)
 					end
 				end
@@ -150,8 +150,8 @@ local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn
 						dimMatchFn(sourceColor, &targetColor)
 						-- Match samplePoint to image i, j, write to image
 						samplePoint = (samplePoint - mins) / range
-						var icoord = [uint](samplePoint.entries[0] * w)
-						var jcoord = [uint](samplePoint.entries[1] * h)
+						var icoord = [uint](samplePoint(0) * w)
+						var jcoord = [uint](samplePoint(1) * h)
 						image:setPixelColor(icoord, jcoord, targetColor)
 					end
 					m.destruct(grid)
