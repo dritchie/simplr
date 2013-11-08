@@ -4,6 +4,7 @@ local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local inheritance = terralib.require("inheritance")
 local BBox = terralib.require("bbox")
+local ad = terralib.require("ad")
 
 
 -- TODO: If virtual function calls are too slow, we can handle the Shape hierarchy through
@@ -20,6 +21,7 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 	assert(ColorVec.__generatorTemplate == Color)
 
 	local real = SpaceVec.RealType
+	local BBoxT = BBox(Vec(double, SpaceVec.Dimension))
 
 	local struct ImplicitShapeT {}
 	ImplicitShapeT.SpaceVec = SpaceVec
@@ -30,7 +32,7 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
-	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBox(SpaceVec)})
+	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBoxT})
 
 	return ImplicitShapeT
 
@@ -39,7 +41,7 @@ end)
 local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	local real = SpaceVec.RealType
-
+	local BBoxT = BBox(Vec(double, SpaceVec.Dimension))
 	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct ConstantColorImplicitShapeT
@@ -70,7 +72,7 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalueAndColor")
 
-	terra ConstantColorImplicitShapeT:bounds() : BBox(SpaceVec)
+	terra ConstantColorImplicitShapeT:bounds() : BBoxT
 		return self.innerShape:bounds()
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "bounds")
@@ -92,15 +94,15 @@ local sphereBBox = templatize(function(VecT)
 			table.insert(stmts, quote
 				[tmp] = [center].entries[ [i] ]
 				[center].entries[ [i] ]  = [tmp] + rad
-				[bbox]:expand([center])
+				[bbox]:expand(&[center])
 				[center].entries[ [i] ]  = [tmp] - rad
-				[bbox]:expand([center])
+				[bbox]:expand(&[center])
 				[center].entries[ [i] ] = [tmp]
 			end)
 		end
 		return stmts
 	end
-	return terra(center: &VecT, rad: real)
+	return terra(center: VecT, rad: real)
 		var bbox = [BBox(VecT)].stackAlloc()
 		var tmp : real
 		[genExpands(center, rad, bbox, tmp)]
@@ -111,7 +113,8 @@ end)
 local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	local real = SpaceVec.RealType
-
+	local BVec = Vec(double, SpaceVec.Dimension)
+	local BBoxT = BBox(BVec)
 	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct SphereImplicitShapeT
@@ -133,8 +136,8 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
 
-	terra SphereImplicitShapeT:bounds() : BBox(SpaceVec)
-		return [sphereBBox(SpaceVec)](&self.center, self.r)
+	terra SphereImplicitShapeT:bounds() : BBoxT
+		return [sphereBBox(BVec)](ad.val(self.center), ad.val(self.r))
 	end
 	inheritance.virtual(SphereImplicitShapeT, "bounds")
 
@@ -148,7 +151,8 @@ end)
 local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	local real = SpaceVec.RealType
-	
+	local BVec = Vec(double, SpaceVec.Dimension)
+	local BBoxT = BBox(BVec)
 	local ImplicitShapeT = ImplicitShape(SpaceVec, ColorVec)
 
 	local struct CapsuleImplicitShapeT
@@ -186,9 +190,9 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
 
-	terra CapsuleImplicitShapeT:bounds() : BBox(SpaceVec)
-		var bbox1 = [sphereBBox(SpaceVec)](&self.bot, self.r)
-		var bbox2 = [sphereBBox(SpaceVec)](&self.top, self.r)
+	terra CapsuleImplicitShapeT:bounds() : BBoxT
+		var bbox1 = [sphereBBox(BVec)](ad.val(self.bot), ad.val(self.r))
+		var bbox2 = [sphereBBox(BVec)](ad.val(self.top), ad.val(self.r))
 		bbox1:expand(bbox2)
 		return bbox1
 	end

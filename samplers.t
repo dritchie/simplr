@@ -69,10 +69,10 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 			for shapei=0,[self].shapes.size do
 				var shape = [self].shapes:get(shapei)
 				var bounds = shape:bounds()
-				[smoothing and expandBounds(bounds, `[smoothParams]:get([shapei])) or quote end]
+				[smoothing and expandBounds(bounds, `ad.val([smoothParams]:get([shapei]))) or quote end]
 				for sampi=0,[pattern].size do
 					var samplePoint = [pattern]:getPointer(sampi)
-					if bounds:contains(@samplePoint) then
+					if bounds:contains(samplePoint) then
 						var isovalue, color = shape:isovalueAndColor(@samplePoint)
 						[smoothing and accumSmooth(self, sampi, isovalue, color, `[smoothParams]:get([shapei])) or
 									   accumSharp(self, sampi, isovalue, color)]

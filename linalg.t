@@ -260,6 +260,18 @@ Vec = templatize(function(real, dim)
 	util.inline(VecT.methods.min)
 
 
+	if real == ad.num then
+		-- Conversion to raw double vector
+		terra VecT:val()
+			var v : Vec(double, dim)
+			[entryList(v)] = [wrap(entryList(self),
+				function(x) return `x:val() end)]
+			return v
+		end
+		util.inline(VecT.methods.val)
+	end
+
+
 	m.addConstructors(VecT)
 	return VecT
 
