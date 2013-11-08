@@ -340,9 +340,8 @@ local function circlesModule(doSmoothing)
 		local posMax = 1.0
 		local radMin = 0.025
 		local radMax = 0.1
-		local smoothAlpha = 5.0
-		-- local smoothBeta = 0.001
-		local smoothBeta = 0.01
+		local smoothAlpha = 10.0
+		local smoothBeta = 10.0
 
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
@@ -355,8 +354,8 @@ local function circlesModule(doSmoothing)
 			[(not doSmoothing) and quote end or
 			quote
 				smoothParams:resize(numCircles)
-				-- var smoothingAmount = 0.005
-				var smoothingAmount = ngamma(smoothAlpha, smoothBeta)
+				var smoothingAmount = 0.005
+				-- var smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
 				for i=0,numCircles do
 					smoothParams:set(i, smoothingAmount)
 				end
