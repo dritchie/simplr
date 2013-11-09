@@ -161,26 +161,51 @@ Vec = templatize(function(real, dim)
 						   function(a,b) return `a == b end),
 					   function(a,b) return `a and b end)]
 	end
+	VecT.metamethods.__eq:adddefinition((terra(v1: VecT, s: real)
+		return [reduce(zip(entryList(v1), replicate(s, dim),
+						   function(a,b) return `a == b end),
+					   function(a,b) return `a and b end)]
+	end):getdefinitions()[1])
 	VecT.metamethods.__gt = terra(v1: VecT, v2: VecT)
 		return [reduce(zip(entryList(v1), entryList(v2),
 						   function(a,b) return `a > b end),
 					   function(a,b) return `a and b end)]
 	end
+	VecT.metamethods.__gt:adddefinition((terra(v1: VecT, s: real)
+		return [reduce(zip(entryList(v1), replicate(s, dim),
+						   function(a,b) return `a > b end),
+					   function(a,b) return `a and b end)]
+	end):getdefinitions()[1])
 	VecT.metamethods.__ge = terra(v1: VecT, v2: VecT)
 		return [reduce(zip(entryList(v1), entryList(v2),
 						   function(a,b) return `a >= b end),
 					   function(a,b) return `a and b end)]
 	end
+	VecT.metamethods.__ge:adddefinition((terra(v1: VecT, s: real)
+		return [reduce(zip(entryList(v1), replicate(s, dim),
+						   function(a,b) return `a >= b end),
+					   function(a,b) return `a and b end)]
+	end):getdefinitions()[1])
 	VecT.metamethods.__lt = terra(v1: VecT, v2: VecT)
 		return [reduce(zip(entryList(v1), entryList(v2),
 						   function(a,b) return `a < b end),
 					   function(a,b) return `a and b end)]
 	end
+	VecT.metamethods.__lt:adddefinition((terra(v1: VecT, s: real)
+		return [reduce(zip(entryList(v1), replicate(s, dim),
+						   function(a,b) return `a < b end),
+					   function(a,b) return `a and b end)]
+	end):getdefinitions()[1])
 	VecT.metamethods.__le = terra(v1: VecT, v2: VecT)
 		return [reduce(zip(entryList(v1), entryList(v2),
 						   function(a,b) return `a <= b end),
 					   function(a,b) return `a and b end)]
 	end
+	VecT.metamethods.__le:adddefinition((terra(v1: VecT, s: real)
+		return [reduce(zip(entryList(v1), replicate(s, dim),
+						   function(a,b) return `a <= b end),
+					   function(a,b) return `a and b end)]
+	end):getdefinitions()[1])
 
 	-- Other mathematical operations
 	terra VecT:dot(v: VecT)
