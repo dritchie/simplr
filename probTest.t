@@ -14,6 +14,8 @@ local Vec = linalg.Vec
 local Vec2d = linalg.Vec(double, 2)
 local Vec2u = linalg.Vec(uint, 2)
 
+local BBox = terralib.require("bbox")
+
 local Color = terralib.require("color")
 local Color1d = Color(double, 1)
 
@@ -51,17 +53,27 @@ end)
 
 -- Load up the target image. This only needs to be done once, since
 --    the type of this object is not dependent upon the 'real' type
-local function loadTargetImage(SampledFunctionType, filename)
+-- 'expandFactor' says how much we want to expand the sample grid around the image sample
+--    locations. e.g. a value of 3 will place the actual image at the center of a 3x3 grid of 
+--    sample locations, with the outer 8 blocks having zero values at every sample point.
+local function loadTargetImage(SampledFunctionType, filename, expandFactor)
+	expandFactor = expandFactor or 1
 	local target = m.gc(terralib.new(SampledFunctionType))
 	local terra loadTarget(targetFilename: rawstring)
 		target:__construct()
 		var image = RGBImage.stackAlloc(im.Format.PNG, targetFilename)
 		var imgWidth = image:width()
 		var imgHeight = image:height()
+		-- For now (for simplicity) we just handle square images
+		if imgWidth ~= imgHeight then util.fatalError("Target image width ~= height\n") end
+		var expandWidth = imgWidth * expandFactor
+		var exandHeight = imgHeight * expandFactor
+		var mincoord = 0.5 - expandFactor*0.5
+		var maxcoord = 0.5 + expandFactor*0.5
 		var grid = ImgGridPattern.stackAlloc(
-			Vec2d.stackAlloc(0.0),
-			Vec2d.stackAlloc(1.0),
-			Vec2u.stackAlloc(imgWidth, imgHeight))
+			Vec2d.stackAlloc(mincoord),
+			Vec2d.stackAlloc(maxcoord),
+			Vec2u.stackAlloc(expandWidth, exandHeight))
 		target:ownSamplingPattern(grid:getSamplePattern())
 		[SampledFunctionType.loadFromImage(RGBImage)](&target, &image,
 			Vec2d.stackAlloc(0.0), Vec2d.stackAlloc(1.0))
@@ -305,24 +317,34 @@ local function polylineModule(doSmoothing, inferenceTime)
 		local lengthMax = 0.1
 		local anglePriorMean = 0.0
 		local anglePriorSD = math.pi/6.0
-		local lineThickness = 0.015
+		local lineThickness = 0.01
 		local centerPenaltyStrength = 0.35
 
 		-- The 'prior' part of the program which generates the polyine to be rendered.
+		-- local polyline = pfn(terra()
+		-- 	var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
+		-- 	points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+		-- 	points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+		-- 	var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
+		-- 	var len : real = 0.0
+		-- 	for i=1,numSegs do
+		-- 		len = nuniformWithFalloff(lengthMin, lengthMax)
+		-- 		dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
+		-- 		points:set(i, points:get(i-1) + (len*dir))
+		-- 	end
+		-- 	var smoothingAmount : real
+		-- 	[(not doSmoothing) and quote end or
+		-- 	quote
+		-- 		-- smoothingAmount = 0.001
+		-- 		smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+		-- 	end]
+		-- 	return RetType.stackAlloc(points, smoothingAmount)
+		-- end)
 		local polyline = pfn(terra()
 			var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
-			points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
-			points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
-			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
-			var len : real = 0.0
 			for i=1,numSegs do
-				len = nuniformWithFalloff(lengthMin, lengthMax)
-				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
-				points:set(i, points:get(i-1) + (len*dir))
-				-- OK, I sort of lied. This isn't just a 'prior'-- I need some factors to keep the points
-				--    inside the image
-				factor([rand.gaussian_logprob(real)](points(i)(0), 0.5, centerPenaltyStrength))
-				factor([rand.gaussian_logprob(real)](points(i)(1), 0.5, centerPenaltyStrength))
+				points:getPointer(i)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+				points:getPointer(i)(1) = nuniformWithFalloff(startPosMin, startPosMax)
 			end
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
@@ -467,20 +489,22 @@ local terra trackTimeSchedule(iter: uint)
 	inferenceTime = [double](iter) / numsamps
 end
 
-local pmodule = polylineModule(true, inferenceTime)
+local pmodule = polylineModule(false, inferenceTime)
 local targetImgName = "squiggle_200.png"
 -- local pmodule = circlesModule(true, inferenceTime)
 -- local targetImgName = "symbol_200.png"
 
-local constraintStrength = 200
-local targetData = loadTargetImage(SampledFunction2d1d, targetImgName)
+local constraintStrength = 2000
+local expandFactor = 2
+constraintStrength = expandFactor*expandFactor*constraintStrength
+local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
 local lmodule = sampledMSELikelihoodModule(pmodule, targetData, constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
--- local kernel = RandomWalk()
+local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
 -- local kernel = HMC()
-local kernel = Schedule(HMC(), trackTimeSchedule)
+-- local kernel = Schedule(HMC(), trackTimeSchedule)
 
 local values = doMCMC(program, kernel, numsamps)
 renderVideo(pmodule, targetData, values, "renders", "movie")

@@ -72,10 +72,19 @@ local ImageInterpFns =
 {
 	NearestNeighbor = function()
 		return macro(function(image, samplePoint)
+			local ImageType = image:gettype().type
+			local ColorVec = ImageType.ColorVec
 			return quote
-				var i = [uint]([samplePoint].entries[0] * [image]:width())
-				var j = [uint]([samplePoint].entries[1] * [image]:height())
-				var color = [image]:getPixelColor(i, j)
+				var i = [int]([samplePoint].entries[0] * [image]:width())
+				var j = [int]([samplePoint].entries[1] * [image]:height())
+				var color : ColorVec
+				if i >=0 and i < [image]:width() and j >= 0 and j < [image]:height() then
+					color = [image]:getPixelColor(i, j)
+				else
+					-- If samplePoint outside of image bounds, then just return black
+					-- TODO: Be able to specify a 'default' color?
+					color:__construct()
+				end
 			in
 				color
 			end
