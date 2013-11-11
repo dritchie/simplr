@@ -192,30 +192,40 @@ end
 
 
 -- Render a video of the sequence of accepted states
-local function renderVideo(lmodule, valueSeq, directory, name)
+local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 	io.write("Rendering video...")
 	io.flush()
 	local moviefilename = string.format("%s/%s.mp4", directory, name)
 	local framebasename = directory .. "/movieframe_%06d.png"
 	local framewildcard = directory .. "/movieframe_*.png"
-	local M = lmodule()
-	local SampledFunctionType = M.sample:gettype().returns[1].type
-	local width = M.targetData.width
-	local height = M.targetData.height
+	local M = pmodule()
+	local SampledFunctionType = M.SampledFunctionType
+	local SamplerType = M.SamplerType
+	local width = targetData.width
+	local height = targetData.height
 	local function renderFrames(valueSeq, basename)
 		return quote
+			var samples = SampledFunctionType.stackAlloc()
+			var grid = ImgGridPattern.stackAlloc(
+				Vec2d.stackAlloc(0.0),
+				Vec2d.stackAlloc(1.0),
+				Vec2u.stackAlloc(width, height))
+			var sampler = SamplerType.stackAlloc(&samples)
 			var framename : int8[1024]
 			var image = RGBImage.stackAlloc(width, height)
 			var zeros = Vec2d.stackAlloc(0.0)
 			var ones = Vec2d.stackAlloc(1.0)
 			for i=0,[valueSeq].size do
 				var val = [valueSeq]:getPointer(i)
-				var samples = M.sample(&val.value)
-				[SampledFunctionType.saveToImage(RGBImage)](samples, &image, zeros, ones)
+				M.sample(&val.value, &sampler, grid:getSamplePattern())
+				[SampledFunctionType.saveToImage(RGBImage)](&samples, &image, zeros, ones)
 				C.sprintf(framename, [basename], i)
 				image:save(im.Format.PNG, framename)
 			end
 			m.destruct(image)
+			m.destruct(grid)
+			m.destruct(sampler)
+			m.destruct(samples)
 		end
 	end
 	local terra doRenderFrames() : {} [renderFrames(valueSeq, framebasename)] end
@@ -338,7 +348,9 @@ local function polylineModule(doSmoothing, inferenceTime)
 		return
 		{
 			prior = polyline,
-			sample = renderSegments
+			sample = renderSegments,
+			SampledFunctionType = SampledFunctionType,
+			SamplerType = Sampler
 		}
 	end
 end
@@ -439,7 +451,9 @@ local function circlesModule(doSmoothing, inferenceTime)
 		return
 		{
 			prior = circles, 
-			sample = renderCircles
+			sample = renderCircles,
+			SampledFunctionType = SampledFunctionType,
+			SamplerType = Sampler
 		}
 	end
 end
@@ -459,18 +473,17 @@ local targetImgName = "squiggle_200.png"
 -- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 200
-
-local lmodule = sampledMSELikelihoodModule(pmodule, loadTargetImage(SampledFunction2d1d, targetImgName), constraintStrength)
+local targetData = loadTargetImage(SampledFunction2d1d, targetImgName)
+local lmodule = sampledMSELikelihoodModule(pmodule, targetData, constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
-
 
 -- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
 -- local kernel = HMC()
 local kernel = Schedule(HMC(), trackTimeSchedule)
-local values = doMCMC(program, kernel, numsamps)
 
-renderVideo(lmodule, values, "renders", "movie")
+local values = doMCMC(program, kernel, numsamps)
+renderVideo(pmodule, targetData, values, "renders", "movie")
 
 
 
