@@ -1,6 +1,5 @@
 -- Include Quicksand
 terralib.require("prob")
-local rand = terralib.require("prob.random")
 
 local m = terralib.require("mem")
 local util = terralib.require("util")
@@ -157,15 +156,9 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 		end
 		initSamplerGlobals()
 
-		local terra sample(value: &ReturnType)
-			P.sample(value, &sampler, target.samplingPattern)
-			return &samples
-		end
-
 		local terra likelihood(value: &ReturnType)
-			sample(value)
+			P.sample(value, &sampler, target.samplingPattern)
 			var err = mse(&samples, &target)
-			-- var err = mseIgnoreTargetZeroes(&samples, &target)
 			var l = -strength*err
 			return l
 		end
@@ -173,7 +166,6 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 		return 
 		{
 			likelihood = likelihood,
-			sample = sample,
 			targetData = targetData
 		}
 	end
@@ -215,6 +207,11 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 	local SamplerType = M.SamplerType
 	local width = targetData.width
 	local height = targetData.height
+	-- We render every frame of a 1000 frame sequence. We want to linearly adjust downward
+	--    for longer sequences
+	-- 1000/1 = numValues/x
+	local numValues = valueSeq.size
+	local frameSkip = math.ceil(numValues / 1000.0)
 	local function renderFrames(valueSeq, basename)
 		return quote
 			var samples = SampledFunctionType.stackAlloc()
@@ -227,11 +224,14 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 			var image = RGBImage.stackAlloc(width, height)
 			var zeros = Vec2d.stackAlloc(0.0)
 			var ones = Vec2d.stackAlloc(1.0)
-			for i=0,[valueSeq].size do
+			var incr = [int]([frameSkip])
+			var framenumber = 0
+			for i=0,[valueSeq].size,incr do
 				var val = [valueSeq]:getPointer(i)
 				M.sample(&val.value, &sampler, grid:getSamplePattern())
 				[SampledFunctionType.saveToImage(RGBImage)](&samples, &image, zeros, ones)
-				C.sprintf(framename, [basename], i)
+				C.sprintf(framename, [basename], framenumber)
+				framenumber = framenumber + 1
 				image:save(im.Format.PNG, framename)
 			end
 			m.destruct(image)
@@ -242,11 +242,8 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 	end
 	local terra doRenderFrames() : {} [renderFrames(valueSeq, framebasename)] end
 	doRenderFrames()
-	local numFrames = valueSeq.size
-	-- Target is 10fps for 1000 frames, lower fps for bigger frame counts
-	local frameRate = (10.0 * 1000) / numFrames
-	util.wait(string.format("ffmpeg -y -r %s -i %s -c:v libx264 -r %s -pix_fmt yuv420p %s 2>&1",
-		frameRate, framebasename, frameRate, moviefilename))
+	util.wait(string.format("ffmpeg -y -r 10 -i %s -c:v libx264 -r 10 -pix_fmt yuv420p %s 2>&1",
+		framebasename, moviefilename))
 	util.wait(string.format("rm -f %s", framewildcard))
 	print("done.")
 end
@@ -308,7 +305,7 @@ local function polylineModule(doSmoothing, inferenceTime)
 		end
 
 		-- A bunch of constants. Perhaps factor these out?
-		local numSegs = 50
+		local numSegs = 40
 		local startPosMin = 0.0
 		local startPosMax = 1.0
 		local startDirMin = 0.0
@@ -321,30 +318,16 @@ local function polylineModule(doSmoothing, inferenceTime)
 		local centerPenaltyStrength = 0.35
 
 		-- The 'prior' part of the program which generates the polyine to be rendered.
-		-- local polyline = pfn(terra()
-		-- 	var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
-		-- 	points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
-		-- 	points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
-		-- 	var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
-		-- 	var len : real = 0.0
-		-- 	for i=1,numSegs do
-		-- 		len = nuniformWithFalloff(lengthMin, lengthMax)
-		-- 		dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
-		-- 		points:set(i, points:get(i-1) + (len*dir))
-		-- 	end
-		-- 	var smoothingAmount : real
-		-- 	[(not doSmoothing) and quote end or
-		-- 	quote
-		-- 		-- smoothingAmount = 0.001
-		-- 		smoothingAmount = lerp(0.01, 0.001, inferenceTime)
-		-- 	end]
-		-- 	return RetType.stackAlloc(points, smoothingAmount)
-		-- end)
 		local polyline = pfn(terra()
 			var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
+			points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+			points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
+			var len : real = 0.0
 			for i=1,numSegs do
-				points:getPointer(i)(0) = nuniformWithFalloff(startPosMin, startPosMax)
-				points:getPointer(i)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+				len = nuniformWithFalloff(lengthMin, lengthMax)
+				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
+				points:set(i, points:get(i-1) + (len*dir))
 			end
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
@@ -354,6 +337,20 @@ local function polylineModule(doSmoothing, inferenceTime)
 			end]
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
+		-- local polyline = pfn(terra()
+		-- 	var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
+		-- 	for i=1,numSegs do
+		-- 		points:getPointer(i)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+		-- 		points:getPointer(i)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+		-- 	end
+		-- 	var smoothingAmount : real
+		-- 	[(not doSmoothing) and quote end or
+		-- 	quote
+		-- 		-- smoothingAmount = 0.001
+		-- 		smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+		-- 	end]
+		-- 	return RetType.stackAlloc(points, smoothingAmount)
+		-- end)
 
 		-- Rendering polyline (used by likelihood module)
 		local terra renderSegments(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
@@ -483,11 +480,20 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 10000
+
+local doAnnealing = true
+
 local inferenceTime = global(double)
-local terra trackTimeSchedule(iter: uint)
-	inferenceTime = [double](iter) / numsamps
-end
+local scheduleFunction = macro(function(iter, currTrace)
+	local setTime = (quote inferenceTime = [double](iter) / numsamps end)
+	if doAnnealing then
+		return quote
+			[setTime]
+			currTrace.temperature = 1.0/(0.0001 + inferenceTime)
+		end
+	else return setTime end
+end)
 
 local pmodule = polylineModule(false, inferenceTime)
 local targetImgName = "squiggle_200.png"
@@ -495,7 +501,7 @@ local targetImgName = "squiggle_200.png"
 -- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
-local expandFactor = 2
+local expandFactor = 3
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
 local lmodule = sampledMSELikelihoodModule(pmodule, targetData, constraintStrength)
@@ -504,7 +510,7 @@ local program = bayesProgram(pmodule, lmodule)
 local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
 -- local kernel = HMC()
--- local kernel = Schedule(HMC(), trackTimeSchedule)
+local kernel = Schedule(kernel, scheduleFunction)
 
 local values = doMCMC(program, kernel, numsamps)
 renderVideo(pmodule, targetData, values, "renders", "movie")
