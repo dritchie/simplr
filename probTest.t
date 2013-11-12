@@ -448,7 +448,7 @@ local function circlesModule(doSmoothing, inferenceTime)
 			[(not doSmoothing) and quote end or
 			quote
 				-- smoothingAmount = 0.005
-				smoothingAmount = lerp(0.005, 0.0001, inferenceTime)
+				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
 				-- smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
 			end]
 			return RetType.stackAlloc(circs, smoothingAmount)
@@ -478,7 +478,7 @@ end
 
 ------------------
 
-local numsamps = 100
+local numsamps = 1000
 
 local doAnnealing = false
 
