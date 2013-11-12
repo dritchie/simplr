@@ -1,5 +1,6 @@
 -- Include Quicksand
 terralib.require("prob")
+local rand = terralib.require("prob.random")
 
 local m = terralib.require("mem")
 local util = terralib.require("util")
@@ -85,6 +86,26 @@ local function loadTargetImage(SampledFunctionType, filename, expandFactor)
 end
 
 
+-- Calculate squared error between two sample sets
+local sqErr = macro(function(srcPointer, tgtPointer)
+	local SampledFunctionT1 = srcPointer:gettype().type
+	local SampledFunctionT2 = tgtPointer:gettype().type
+	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
+	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
+	local accumType = SampledFunctionT1.ColorVec.RealType
+	local function makeProcessFn(accum)
+		return macro(function(color1, color2)
+			return quote [accum] = [accum] + [color1]:distSq(@[color2]) end
+		end) 
+	end
+	return quote
+		var accum : accumType = 0.0
+		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accum))](srcPointer, tgtPointer)
+	in
+		accum
+	end
+end)
+
 -- Calculate mean squared error between two sample sets
 local mse = macro(function(srcPointer, tgtPointer)
 	local SampledFunctionT1 = srcPointer:gettype().type
@@ -106,35 +127,9 @@ local mse = macro(function(srcPointer, tgtPointer)
 	end
 end)
 
--- Calculate mean squared error between two sample sets,
---    but ignore sample points where the target has value 0
-local mseIgnoreTargetZeroes = macro(function(srcPointer, tgtPointer)
-	local SampledFunctionT1 = srcPointer:gettype().type
-	local SampledFunctionT2 = tgtPointer:gettype().type
-	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
-	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
-	local accumType = SampledFunctionT1.ColorVec.RealType
-	local function makeProcessFn(accum)
-		return macro(function(color1, color2)
-			return quote
-				if not (@[color2] == 0.0) then
-					[accum] = [accum] + [color1]:distSq(@[color2])
-				end
-			end
-		end) 
-	end
-	return quote
-		var accum : accumType = 0.0
-		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accum))](srcPointer, tgtPointer)
-		var result = accum / srcPointer.samples.size
-	in
-		result
-	end
-end)
-
 
 -- Likelihood module for calculating MSE with respect to a sampled target function
-local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, strength)
+local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData, strength)
 	local target = targetData.target
 	return function()
 		local P = priorModuleWithSampling()
@@ -158,6 +153,7 @@ local function sampledMSELikelihoodModule(priorModuleWithSampling, targetData, s
 
 		local terra likelihood(value: &ReturnType)
 			P.sample(value, &sampler, target.samplingPattern)
+			-- var err = sqErr(&samples, &target)
 			var err = mse(&samples, &target)
 			var l = -strength*err
 			return l
@@ -315,7 +311,7 @@ local function polylineModule(doSmoothing, inferenceTime)
 		local anglePriorMean = 0.0
 		local anglePriorSD = math.pi/6.0
 		local lineThickness = 0.01
-		local centerPenaltyStrength = 0.35
+		local centerPenaltyStrength = 0.4
 
 		-- The 'prior' part of the program which generates the polyine to be rendered.
 		local polyline = pfn(terra()
@@ -328,6 +324,8 @@ local function polylineModule(doSmoothing, inferenceTime)
 				len = nuniformWithFalloff(lengthMin, lengthMax)
 				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
 				points:set(i, points:get(i-1) + (len*dir))
+				-- factor([rand.gaussian_logprob(real)](points(i)(0), 0.5, centerPenaltyStrength))
+				-- factor([rand.gaussian_logprob(real)](points(i)(1), 0.5, centerPenaltyStrength))
 			end
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
@@ -480,9 +478,9 @@ end
 
 ------------------
 
-local numsamps = 10000
+local numsamps = 100
 
-local doAnnealing = true
+local doAnnealing = false
 
 local inferenceTime = global(double)
 local scheduleFunction = macro(function(iter, currTrace)
@@ -495,23 +493,23 @@ local scheduleFunction = macro(function(iter, currTrace)
 	else return setTime end
 end)
 
-local pmodule = polylineModule(false, inferenceTime)
-local targetImgName = "squiggle_200.png"
--- local pmodule = circlesModule(true, inferenceTime)
--- local targetImgName = "symbol_200.png"
+-- local pmodule = polylineModule(false, inferenceTime)
+-- local targetImgName = "squiggle_200.png"
+local pmodule = circlesModule(true, inferenceTime)
+local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
-local expandFactor = 3
+local expandFactor = 1
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
-local lmodule = sampledMSELikelihoodModule(pmodule, targetData, constraintStrength)
+local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength)
 local program = bayesProgram(pmodule, lmodule)
 
-local kernel = RandomWalk()
+-- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
--- local kernel = HMC()
-local kernel = Schedule(kernel, scheduleFunction)
+local kernel = HMC()
 
+local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
 renderVideo(pmodule, targetData, values, "renders", "movie")
 
