@@ -480,7 +480,7 @@ end
 
 local numsamps = 1000
 
-local doAnnealing = false
+local doAnnealing = true
 
 local inferenceTime = global(double)
 local scheduleFunction = macro(function(iter, currTrace)
@@ -488,7 +488,7 @@ local scheduleFunction = macro(function(iter, currTrace)
 	if doAnnealing then
 		return quote
 			[setTime]
-			currTrace.temperature = 1.0/(0.0001 + inferenceTime)
+			currTrace.temperature = 1.0/(0.001 + inferenceTime)
 		end
 	else return setTime end
 end)
