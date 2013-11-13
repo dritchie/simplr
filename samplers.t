@@ -56,6 +56,11 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				if ivv < -spv*logSmoothAlphaThresh then
 					var alpha = ad.math.exp(-[isovalue] / sp)
 					[self].sampledFn:accumulateSample([index], [color], alpha)
+					-- -- Experimental two-field (one tight, one smooth) version
+					-- var alpha = 0.1*ad.math.exp(-[isovalue] / (sp*2))
+					-- [self].sampledFn:accumulateSample([index], [color], alpha)
+					-- alpha = 1.0*ad.math.exp(-[isovalue] / 0.0005)
+					-- [self].sampledFn:accumulateSample([index], [color], alpha)
 				end
 			end
 		end

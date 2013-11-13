@@ -316,8 +316,10 @@ local function polylineModule(doSmoothing, inferenceTime)
 		-- The 'prior' part of the program which generates the polyine to be rendered.
 		local polyline = pfn(terra()
 			var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
-			points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
-			points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+			-- points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+			-- points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+			points:getPointer(0)(0) = 0.258
+			points:getPointer(0)(1) = 0.219
 			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
 			var len : real = 0.0
 			for i=1,numSegs do
@@ -493,13 +495,13 @@ local scheduleFunction = macro(function(iter, currTrace)
 	else return setTime end
 end)
 
--- local pmodule = polylineModule(false, inferenceTime)
--- local targetImgName = "squiggle_200.png"
-local pmodule = circlesModule(true, inferenceTime)
-local targetImgName = "symbol_200.png"
+local pmodule = polylineModule(true, inferenceTime)
+local targetImgName = "squiggle_200.png"
+-- local pmodule = circlesModule(true, inferenceTime)
+-- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
-local expandFactor = 1
+local expandFactor = 3
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
 local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength)
