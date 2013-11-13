@@ -85,29 +85,9 @@ local function loadTargetImage(SampledFunctionType, filename, expandFactor)
 	return {target = target, width = width, height = height}
 end
 
-
--- Calculate squared error between two sample sets
-local sqErr = macro(function(srcPointer, tgtPointer)
-	local SampledFunctionT1 = srcPointer:gettype().type
-	local SampledFunctionT2 = tgtPointer:gettype().type
-	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
-	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
-	local accumType = SampledFunctionT1.ColorVec.RealType
-	local function makeProcessFn(accum)
-		return macro(function(color1, color2)
-			return quote [accum] = [accum] + [color1]:distSq(@[color2]) end
-		end) 
-	end
-	return quote
-		var accum : accumType = 0.0
-		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accum))](srcPointer, tgtPointer)
-	in
-		accum
-	end
-end)
-
 -- Calculate mean squared error between two sample sets
-local mse = macro(function(srcPointer, tgtPointer)
+-- 'zeroWeight' indicates how much to weight the target samples that have value 0.
+local mse = macro(function(srcPointer, tgtPointer, zeroWeight)
 	local SampledFunctionT1 = srcPointer:gettype().type
 	local SampledFunctionT2 = tgtPointer:gettype().type
 	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
@@ -115,7 +95,18 @@ local mse = macro(function(srcPointer, tgtPointer)
 	local accumType = SampledFunctionT1.ColorVec.RealType
 	local function makeProcessFn(accum)
 		return macro(function(color1, color2)
-			return quote [accum] = [accum] + [color1]:distSq(@[color2]) end
+			return quote
+				var err = [color1]:distSq(@[color2])
+				[zeroWeight and
+				quote
+					var w = 1.0
+					if @[color2] == 0.0 then w = zeroWeight end
+					[accum] = [accum] + w*err
+				end or
+				quote
+					[accum] = [accum] + err
+				end]
+			end
 		end) 
 	end
 	return quote
@@ -129,7 +120,7 @@ end)
 
 
 -- Likelihood module for calculating MSE with respect to a sampled target function
-local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData, strength)
+local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime)
 	local target = targetData.target
 	return function()
 		local P = priorModuleWithSampling()
@@ -153,8 +144,9 @@ local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData,
 
 		local terra likelihood(value: &ReturnType)
 			P.sample(value, &sampler, target.samplingPattern)
-			-- var err = sqErr(&samples, &target)
-			var err = mse(&samples, &target)
+			var zeroWeight = [double](inferenceTime)
+			var err = mse(&samples, &target, zeroWeight)
+			-- C.printf("\n%g\n", err)
 			var l = -strength*err
 			return l
 		end
@@ -480,9 +472,9 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 10000
 
-local doAnnealing = true
+local doAnnealing = false
 
 local inferenceTime = global(double)
 local scheduleFunction = macro(function(iter, currTrace)
@@ -495,21 +487,21 @@ local scheduleFunction = macro(function(iter, currTrace)
 	else return setTime end
 end)
 
-local pmodule = polylineModule(true, inferenceTime)
+local pmodule = polylineModule(false, inferenceTime)
 local targetImgName = "squiggle_200.png"
--- local pmodule = circlesModule(true, inferenceTime)
+-- local pmodule = circlesModule(false, inferenceTime)
 -- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
 local expandFactor = 3
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
-local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength)
+local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength, inferenceTime)
 local program = bayesProgram(pmodule, lmodule)
 
--- local kernel = RandomWalk()
+local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
-local kernel = HMC()
+-- local kernel = HMC()
 
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
