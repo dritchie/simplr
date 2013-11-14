@@ -348,7 +348,6 @@ local function polylineModule(doSmoothing, inferenceTime)
 		local anglePriorMean = 0.0
 		local anglePriorSD = math.pi/6.0
 		local lineThickness = 0.01
-		local centerPenaltyStrength = 0.4
 
 		-- The 'prior' part of the program which generates the polyine to be rendered.
 		local polyline = pfn(terra()
@@ -363,8 +362,6 @@ local function polylineModule(doSmoothing, inferenceTime)
 				len = nuniformWithFalloff(lengthMin, lengthMax)
 				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
 				points:set(i, points:get(i-1) + (len*dir))
-				-- factor([rand.gaussian_logprob(real)](points(i)(0), 0.5, centerPenaltyStrength))
-				-- factor([rand.gaussian_logprob(real)](points(i)(1), 0.5, centerPenaltyStrength))
 			end
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
