@@ -86,7 +86,6 @@ local function loadTargetImage(SampledFunctionType, filename, expandFactor)
 end
 
 -- Calculate mean squared error between two sample sets
--- 'zeroWeight' indicates how much to weight the target samples that have value 0.
 local mse = macro(function(srcPointer, tgtPointer, zeroWeight)
 	local SampledFunctionT1 = srcPointer:gettype().type
 	local SampledFunctionT2 = tgtPointer:gettype().type
@@ -119,8 +118,41 @@ local mse = macro(function(srcPointer, tgtPointer, zeroWeight)
 end)
 
 
+-- Calculate mean squared error between two sample sets
+-- Return the resulting error in two components: the error from target pixels with value 0,
+--    and the error from target pixels with value > 0.
+local mseComps = macro(function(srcPointer, tgtPointer)
+	local SampledFunctionT1 = srcPointer:gettype().type
+	local SampledFunctionT2 = tgtPointer:gettype().type
+	assert(SampledFunctionT1.__generatorTemplate == SampledFunction)
+	assert(SampledFunctionT2.__generatorTemplate == SampledFunction)
+	local accumType = SampledFunctionT1.ColorVec.RealType
+	local function makeProcessFn(accumZero, accumNonZero)
+		return macro(function(color1, color2)
+			return quote
+				var err = [color1]:distSq(@[color2])
+				if @[color2] == 0.0 then
+					[accumZero] = [accumZero] + err
+				else
+					[accumNonZero] = [accumNonZero] + err
+				end
+			end
+		end) 
+	end
+	return quote
+		var accumZero : accumType = 0.0
+		var accumNonZero : accumType = 0.0
+		[SampledFunctionT1.lockstep(SampledFunctionT2, makeProcessFn(accumZero, accumNonZero))](srcPointer, tgtPointer)
+		var resultZero = accumZero / srcPointer.samples.size
+		var resultNonzero = accumNonZero / srcPointer.samples.size
+	in
+		resultZero, resultNonzero
+	end
+end)
+
+
 -- Likelihood module for calculating MSE with respect to a sampled target function
-local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime)
+local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData, strength, inferenceTime, zeroTargetLLSum, doLocalErrorTempering)
 	local target = targetData.target
 	return function()
 		local P = priorModuleWithSampling()
@@ -145,10 +177,22 @@ local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData,
 		local terra likelihood(value: &ReturnType)
 			P.sample(value, &sampler, target.samplingPattern)
 			var zeroWeight = [double](inferenceTime)
-			var err = mse(&samples, &target)
-			-- var err = mse(&samples, &target, zeroWeight)
-			-- var err = mse(&samples, &target, 0.0)
-			var l = -strength*err
+			var l : real
+			[doLocalErrorTempering and
+				quote
+					var zeroErr, nonZeroErr = mseComps(&samples, &target)
+					var zeroLL = -strength*zeroErr
+					var nonZeroLL = -strength*nonZeroErr
+					zeroTargetLLSum = ad.val(zeroLL)
+					l = nonZeroLL + inferenceTime*zeroLL
+					l = nonZeroLL
+				end
+			or
+				quote
+					-- l = -strength * mse(&samples, &target, 0.0)
+					l = -strength * mse(&samples, &target)
+				end
+			]
 			return l
 		end
 
@@ -325,8 +369,8 @@ local function polylineModule(doSmoothing, inferenceTime)
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
 			quote
-				smoothingAmount = 0.0005
-				-- smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+				-- smoothingAmount = 0.0005
+				smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
 			end]
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
@@ -475,17 +519,31 @@ end
 
 local numsamps = 1000
 
-local doAnnealing = false
+local doGlobalAnnealing = true
+local initialGlobalTemp = 10
+local doLocalErrorTempering = true
 
+-- Global variables
 local inferenceTime = global(double)
+local zeroTargetLLSum = global(double)
 
 local function genAnnealingCode(trace, infTime)
-	return quote [trace].temperature = 1.0/(0.001 + inferenceTime) end
+	local init = 1.0 / initialGlobalTemp
+	return quote [trace].temperature = 1.0/(init + inferenceTime) end
+end
+local function genLocalErrorTemperingCode(trace, prevInfTime, currInfTime)
+	return quote
+		var oldLLPart = [prevInfTime]*zeroTargetLLSum
+		var newLLPart = [currInfTime]*zeroTargetLLSum
+		[trace].logprob = [trace].logprob - oldLLPart + newLLPart
+	end
 end
 local scheduleFunction = macro(function(iter, currTrace)
 	return quote
+		var oldInfTime = inferenceTime
 		inferenceTime = [double](iter) / numsamps
-		[util.optionally(doAnnealing, genAnnealingCode, currTrace, inferenceTime)]
+		[util.optionally(doGlobalAnnealing, genAnnealingCode, currTrace, inferenceTime)]
+		[util.optionally(doLocalErrorTempering, genLocalErrorTemperingCode, currTrace, oldInfTime, inferenceTime)]
 	end
 end)
 
@@ -495,10 +553,11 @@ local targetImgName = "squiggle_200.png"
 -- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
-local expandFactor = 3
+local expandFactor = 1
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
-local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength, inferenceTime)
+local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength,
+	inferenceTime, zeroTargetLLSum, doLocalErrorTempering)
 local program = bayesProgram(pmodule, lmodule)
 
 -- local kernel = RandomWalk()
