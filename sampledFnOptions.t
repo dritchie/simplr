@@ -143,10 +143,11 @@ local ClampFns =
 		if maxval == nil then maxval = 1.0 end
 		local minuspower = -power
 		local invminuspower = 1.0/minuspower
+		local innerTerm = math.pow(maxval, minuspower)
 		return macro(function(color)
 			local VecT = color:gettype()
 			return `[VecT.map(color, function(ce)
-				return `ad.math.pow(ad.math.pow([ce], minuspower) + ad.math.pow(maxval, minuspower), invminuspower)
+				return `ad.math.pow(ad.math.pow([ce], minuspower) + innerTerm, invminuspower)
 			end)]
 		end)
 	end
