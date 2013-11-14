@@ -145,8 +145,9 @@ local function sampledErrorLikelihoodModule(priorModuleWithSampling, targetData,
 		local terra likelihood(value: &ReturnType)
 			P.sample(value, &sampler, target.samplingPattern)
 			var zeroWeight = [double](inferenceTime)
-			var err = mse(&samples, &target, zeroWeight)
-			-- C.printf("\n%g\n", err)
+			var err = mse(&samples, &target)
+			-- var err = mse(&samples, &target, zeroWeight)
+			-- var err = mse(&samples, &target, 0.0)
 			var l = -strength*err
 			return l
 		end
@@ -324,8 +325,8 @@ local function polylineModule(doSmoothing, inferenceTime)
 			var smoothingAmount : real
 			[(not doSmoothing) and quote end or
 			quote
-				-- smoothingAmount = 0.001
-				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
+				smoothingAmount = 0.0005
+				-- smoothingAmount = lerp(0.01, 0.001, inferenceTime)
 			end]
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
@@ -472,22 +473,23 @@ end
 
 ------------------
 
-local numsamps = 10000
+local numsamps = 1000
 
 local doAnnealing = false
 
 local inferenceTime = global(double)
+
+local function genAnnealingCode(trace, infTime)
+	return quote [trace].temperature = 1.0/(0.001 + inferenceTime) end
+end
 local scheduleFunction = macro(function(iter, currTrace)
-	local setTime = (quote inferenceTime = [double](iter) / numsamps end)
-	if doAnnealing then
-		return quote
-			[setTime]
-			currTrace.temperature = 1.0/(0.001 + inferenceTime)
-		end
-	else return setTime end
+	return quote
+		inferenceTime = [double](iter) / numsamps
+		[util.optionally(doAnnealing, genAnnealingCode, currTrace, inferenceTime)]
+	end
 end)
 
-local pmodule = polylineModule(false, inferenceTime)
+local pmodule = polylineModule(true, inferenceTime)
 local targetImgName = "squiggle_200.png"
 -- local pmodule = circlesModule(false, inferenceTime)
 -- local targetImgName = "symbol_200.png"
@@ -499,9 +501,9 @@ local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFac
 local lmodule = sampledErrorLikelihoodModule(pmodule, targetData, constraintStrength, inferenceTime)
 local program = bayesProgram(pmodule, lmodule)
 
-local kernel = RandomWalk()
+-- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
--- local kernel = HMC()
+local kernel = HMC()
 
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
