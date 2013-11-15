@@ -328,6 +328,9 @@ local function polylineModule(doSmoothing, inferenceTime)
 		local nuniformWithFalloff = macro(function(lo, hi)
 			return `uniformWithFalloff([lo], [hi], {structural=false})
 		end)
+		local ngamma = macro(function(a, b)
+			return `gamma([a], [b], {structural=false})
+		end)
 
 		local terra rotate(dir: Vec2, angle: real)
 			var x = dir(0)
@@ -338,13 +341,16 @@ local function polylineModule(doSmoothing, inferenceTime)
 		end
 
 		-- A bunch of constants. Perhaps factor these out?
-		local numSegs = 40
+		-- local numSegs = 40
+		local numSegs = 20
 		local startPosMin = 0.0
 		local startPosMax = 1.0
 		local startDirMin = 0.0
 		local startDirMax = 2.0*math.pi
-		local lengthMin = 0.01
-		local lengthMax = 0.1
+		-- local lengthMin = 0.01
+		-- local lengthMax = 0.1
+		local lengthAlpha = 10.0
+		local lengthBeta = 0.01
 		local anglePriorMean = 0.0
 		local anglePriorSD = math.pi/6.0
 		local lineThickness = 0.01
@@ -359,7 +365,8 @@ local function polylineModule(doSmoothing, inferenceTime)
 			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
 			var len : real = 0.0
 			for i=1,numSegs do
-				len = nuniformWithFalloff(lengthMin, lengthMax)
+				-- len = nuniformWithFalloff(lengthMin, lengthMax)
+				len = ngamma(lengthAlpha, lengthBeta)
 				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
 				points:set(i, points:get(i-1) + (len*dir))
 			end
@@ -470,8 +477,6 @@ local function circlesModule(doSmoothing, inferenceTime)
 		local posMax = 1.0
 		local radMin = 0.025
 		local radMax = 0.1
-		local smoothAlpha = 10.0
-		local smoothBeta = 10.0
 
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
@@ -485,7 +490,6 @@ local function circlesModule(doSmoothing, inferenceTime)
 			quote
 				-- smoothingAmount = 0.005
 				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
-				-- smoothingAmount = 1.0 / ngamma(smoothAlpha, smoothBeta)
 			end]
 			return RetType.stackAlloc(circs, smoothingAmount)
 		end)
@@ -514,7 +518,7 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 2000
 
 local doGlobalAnnealing = true
 local initialGlobalTemp = 10
@@ -546,7 +550,7 @@ end)
 
 local pmodule = polylineModule(true, inferenceTime)
 local targetImgName = "squiggle_200.png"
--- local pmodule = circlesModule(false, inferenceTime)
+-- local pmodule = circlesModule(true, inferenceTime)
 -- local targetImgName = "symbol_200.png"
 
 local constraintStrength = 2000
