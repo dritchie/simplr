@@ -288,9 +288,9 @@ end
 
 local PolyinesRetType = templatize(function(real)
 	local Vec2 = Vec(real, 2)
-	local struct PolyinesRetTypeT { points: Vector(Vec2), smoothParam: real }
+	local struct PolyinesRetTypeT { points: Vector(Vec2), smoothParam: double }
 	terra PolyinesRetTypeT:__construct() m.init(self.points) end
-	terra PolyinesRetTypeT:__construct(p: Vector(Vec2), s: real)
+	terra PolyinesRetTypeT:__construct(p: Vector(Vec2), s: double)
 		self.points = p; self.smoothParam = s
 	end
 	terra PolyinesRetTypeT:__copy(other: &PolyinesRetTypeT)
@@ -358,10 +358,10 @@ local function polylineModule(doSmoothing, inferenceTime)
 		-- The 'prior' part of the program which generates the polyine to be rendered.
 		local polyline = pfn(terra()
 			var points = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc(0.0))
-			-- points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
-			-- points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
-			points:getPointer(0)(0) = 0.258
-			points:getPointer(0)(1) = 0.219
+			points:getPointer(0)(0) = nuniformWithFalloff(startPosMin, startPosMax)
+			points:getPointer(0)(1) = nuniformWithFalloff(startPosMin, startPosMax)
+			-- points:getPointer(0)(0) = 0.258
+			-- points:getPointer(0)(1) = 0.219
 			var dir = rotate(Vec2.stackAlloc(1.0, 0.0), nuniformWithFalloff(startDirMin, startDirMax))
 			var len : real = 0.0
 			for i=1,numSegs do
@@ -370,7 +370,7 @@ local function polylineModule(doSmoothing, inferenceTime)
 				dir = rotate(dir, ngaussian(anglePriorMean, anglePriorSD))
 				points:set(i, points:get(i-1) + (len*dir))
 			end
-			var smoothingAmount : real
+			var smoothingAmount : double
 			[(not doSmoothing) and quote end or
 			quote
 				-- smoothingAmount = 0.0005
@@ -429,9 +429,9 @@ end)
 -- Super annoying, but if I want to be able to render things exactly as they looked during inference,
 --    I need to package up the smoothing param in the return value of the computation.
 local CirclesRetType = templatize(function(real)
-	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParam: real }
+	local struct CircleRetTypeT { circles: Vector(Circle(real)), smoothParam: double }
 	terra CircleRetTypeT:__construct() m.init(self.circles) end
-	terra CircleRetTypeT:__construct(c: Vector(Circle(real)), s: real)
+	terra CircleRetTypeT:__construct(c: Vector(Circle(real)), s: double)
 		self.circles = c; self.smoothParam = s
 	end
 	terra CircleRetTypeT:__copy(other: &CircleRetTypeT)
@@ -485,7 +485,7 @@ local function circlesModule(doSmoothing, inferenceTime)
 				circs:getPointer(i).center(1) = nuniformWithFalloff(posMin, posMax)
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
-			var smoothingAmount : real
+			var smoothingAmount = 0.0
 			[(not doSmoothing) and quote end or
 			quote
 				-- smoothingAmount = 0.005

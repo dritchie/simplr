@@ -11,6 +11,10 @@ local ad = terralib.require("ad")
 local smoothAlphaThresh = 0.02
 local logSmoothAlphaThresh = math.log(smoothAlphaThresh)
 
+-- -- AD primitive for isovalue smoothing calculations
+-- local smooth = ad.def.makePrimitive(
+-- 	terra(isoval: double, ) ... end,
+-- 	function(...) end)
 
 local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
@@ -56,11 +60,6 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				if ivv < -spv*logSmoothAlphaThresh then
 					var alpha = ad.math.exp(-[isovalue] / sp)
 					[self].sampledFn:accumulateSample([index], [color], alpha)
-					-- -- Experimental two-field (one tight, one smooth) version
-					-- var alpha = 0.1*ad.math.exp(-[isovalue] / (sp*2))
-					-- [self].sampledFn:accumulateSample([index], [color], alpha)
-					-- alpha = 1.0*ad.math.exp(-[isovalue] / 0.0005)
-					-- [self].sampledFn:accumulateSample([index], [color], alpha)
 				end
 			end
 		end
@@ -69,7 +68,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 		end
 		local self = symbol(&ImplicitSamplerT, "self")
 		local pattern = symbol(&SamplingPattern, "pattern")
-		local smoothParam = symbol(real, "smoothParams")
+		local smoothParam = symbol(double, "smoothParam")
 		local params = {self, pattern}
 		if smoothing then table.insert(params, smoothParam) end
 		return terra([params])
@@ -77,12 +76,12 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 			for shapei=0,[self].shapes.size do
 				var shape = [self].shapes:get(shapei)
 				var bounds = shape:bounds()
-				[smoothing and expandBounds(bounds, `ad.val([smoothParam])) or quote end]
+				[smoothing and expandBounds(bounds, smoothParam) or quote end]
 				for sampi=0,[pattern].size do
 					var samplePoint = [pattern]:getPointer(sampi)
 					if bounds:contains(samplePoint) then
 						var isovalue, color = shape:isovalueAndColor(@samplePoint)
-						[smoothing and accumSmooth(self, sampi, isovalue, color, `[smoothParam]) or
+						[smoothing and accumSmooth(self, sampi, isovalue, color, smoothParam) or
 									   accumSharp(self, sampi, isovalue, color)]
 					end
 				end
