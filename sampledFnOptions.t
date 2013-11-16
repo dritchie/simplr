@@ -116,7 +116,12 @@ local AccumFns =
 	end,
 	Over = function()
 		return macro(function(currColor, newColor, alpha)
-			return `[alpha]*[newColor] + (1.0 - [alpha])*[currColor]
+			local VecT = currColor:gettype()
+			return
+				`[VecT.zip(currColor, newColor, function(c, n)
+					return `[alpha]*n + (1.0 - [alpha])*c
+				end)]
+			-- return `[alpha]*[newColor] + (1.0 - [alpha])*[currColor]
 		end)
 	end,
 	Sum = function()

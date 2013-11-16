@@ -257,6 +257,14 @@ Vec = templatize(function(real, dim)
 			v
 		end
 	end
+	function VecT.zip(vec1, vec2, fn)
+		return quote
+			var v : VecT
+			[entryList(v)] = [zip(entryList(vec1), entryList(vec2), fn)]
+		in
+			v
+		end
+	end
 	function VecT.foreach(vec, fn)
 		return quote
 			[wrap(entryList(vec), fn)]
