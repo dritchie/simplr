@@ -11,10 +11,21 @@ local ad = terralib.require("ad")
 local smoothAlphaThresh = 0.02
 local logSmoothAlphaThresh = math.log(smoothAlphaThresh)
 
--- -- AD primitive for isovalue smoothing calculations
--- local smooth = ad.def.makePrimitive(
--- 	terra(isoval: double, ) ... end,
--- 	function(...) end)
+-- AD primitive for isovalue smoothing calculations
+local adj = ad.def.adj
+local val = ad.def.val
+local accumadj = ad.def.accumadj
+local smoothAlpha = ad.def.makePrimitive(
+	terra(isoval: double, smoothParam: double)
+		return ad.math.exp(-isoval / smoothParam)
+	end,
+	function(T1, T2)
+		return terra(v: ad.def.DualNumPtr, isoval: T1, smoothParam: T2)
+			var spv = val(smoothParam)
+			accumadj(isoval, -adj(v)*val(v)/spv)
+			accumadj(smoothParam, adj(v)*val(v)*val(isoval)/(spv*spv))
+		end
+	end)
 
 local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 
@@ -58,7 +69,8 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				var spv = ad.val(sp)
 				var ivv = ad.val([isovalue])
 				if ivv < -spv*logSmoothAlphaThresh then
-					var alpha = ad.math.exp(-[isovalue] / sp)
+					-- var alpha = ad.math.exp(-[isovalue] / sp)
+					var alpha = smoothAlpha([isovalue], sp)
 					[self].sampledFn:accumulateSample([index], [color], alpha)
 				end
 			end
