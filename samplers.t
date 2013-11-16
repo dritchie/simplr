@@ -22,8 +22,8 @@ local smoothAlpha = ad.def.makePrimitive(
 	function(T1, T2)
 		return terra(v: ad.def.DualNumPtr, isoval: T1, smoothParam: T2)
 			var spv = val(smoothParam)
-			accumadj(isoval, -adj(v)*val(v)/spv)
-			accumadj(smoothParam, adj(v)*val(v)*val(isoval)/(spv*spv))
+			accumadj(v, isoval, -val(v)/spv)
+			accumadj(v, smoothParam, val(v)*val(isoval)/(spv*spv))
 		end
 	end)
 
