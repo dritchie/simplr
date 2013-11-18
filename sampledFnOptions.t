@@ -106,6 +106,21 @@ local SampleInterpFns =
 	end
 }
 
+-- AD primitive for the over operator
+local val = ad.def.val
+local accumadj = ad.def.accumadj
+local over = ad.def.makePrimitive(
+	terra(curr: double, new: double, alpha: double)
+		return (1.0-alpha)*curr + alpha*new
+	end,
+	function(T1, T2, T3)
+		return terra(v: ad.def.DualNumPtr, curr: T1, new: T2, alpha: T3)
+			accumadj(v, alpha, val(new) - val(curr))
+			accumadj(v, new, val(alpha))
+			accumadj(v, curr, 1.0 - val(alpha))
+		end
+	end)
+
 -- Some default color accumlation / clamping functions
 -- Can think of these as a different interface to providing the same information as
 --    OpenGL's glBlendFunc and glBlendEquation
@@ -119,7 +134,8 @@ local AccumFns =
 			local VecT = currColor:gettype()
 			return
 				`[VecT.zip(currColor, newColor, function(c, n)
-					return `[alpha]*n + (1.0 - [alpha])*c
+					-- return `[alpha]*n + (1.0 - [alpha])*c
+					return `over(c, n, [alpha])
 				end)]
 			-- return `[alpha]*[newColor] + (1.0 - [alpha])*[currColor]
 		end)
