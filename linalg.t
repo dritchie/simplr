@@ -270,6 +270,11 @@ Vec = templatize(function(real, dim)
 			[wrap(entryList(vec), fn)]
 		end
 	end
+	function VecT.foreachPair(vec1, vec2, fn)
+		return quote
+			[zip(entryList(vec1), entryList(vec2), fn)]
+		end
+	end
 	function VecT.entryExpList(vec)
 		return entryList(vec)
 	end

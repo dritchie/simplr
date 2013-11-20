@@ -12,7 +12,6 @@ local smoothAlphaThresh = 0.02
 local logSmoothAlphaThresh = math.log(smoothAlphaThresh)
 
 -- AD primitive for isovalue smoothing calculations
-local adj = ad.def.adj
 local val = ad.def.val
 local accumadj = ad.def.accumadj
 local smoothAlpha = ad.def.makePrimitive(
