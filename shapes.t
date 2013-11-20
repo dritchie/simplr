@@ -1,5 +1,6 @@
 local templatize = terralib.require("templatize")
 local m = terralib.require("mem")
+local util = terralib.require("util")
 local Vec = terralib.require("linalg").Vec
 local Color = terralib.require("color")
 local inheritance = terralib.require("inheritance")
@@ -131,8 +132,49 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 		self.rSq = r*r
 	end
 
+	-- -- AD primitive for sphere isosurface function
+	-- local val = ad.def.val
+	-- local accumadj = ad.def.accumadj
+	-- local pointComps = terralib.newlist()
+	-- for i=1,SpaceVec.Dimension do pointComps:insert(symbol(SpaceVec.RealType)) end
+	-- local centerComps = terralib.newlist()
+	-- for i=1,SpaceVec.Dimension do centerComps:insert(symbol(SpaceVec.RealType)) end
+	-- local rSq = symbol(SpaceVec.RealType)
+	-- local allsyms = util.concattables(pointComps, centerComps, {rSq})
+	-- local isoval = ad.def.makePrimitive(
+	-- 	terra([allsyms])
+	-- 		var point = SpaceVec.stackAlloc([pointComps])
+	-- 		var center = SpaceVec.stackAlloc([centerComps])
+	-- 		return point:distSq(center) - [rSq]
+	-- 	end,
+	-- 	function(...)
+	-- 		local ptype = (select(1,...))
+	-- 		local ctype = (select(1+SpaceVec.Dimension,...))
+	-- 		local rtype = (select(1+2*SpaceVec.Dimension,...))
+	-- 		pointComps = terralib.newlist()
+	-- 		for i=1,SpaceVec.Dimension do pointComps:insert(symbol(ptype)) end
+	-- 		centerComps = terralib.newlist()
+	-- 		for i=1,SpaceVec.Dimension do centerComps:insert(symbol(ctype)) end
+	-- 		rSq = symbol(rtype)
+	-- 		allsyms = util.concattables(pointComps, centerComps, {rSq})
+	-- 		local PVec = Vec(ptype, SpaceVec.Dimension)
+	-- 		local CVec = Vec(ctype, SpaceVec.Dimension)
+	-- 		return terra(v: ad.num, [allsyms])
+	-- 			var point = PVec.stackAlloc([pointComps])
+	-- 			var center = CVec.stackAlloc([centerComps])
+	-- 			accumadj(v, [rSq], -1.0)
+	-- 			[PVec.foreachPair(point, center, function(p, c)
+	-- 				return quote
+	-- 					accumadj(v, p, 2*(val(p) - val(c)))
+	-- 					accumadj(v, c, 2*(val(c) - val(p)))
+	-- 				end
+	-- 			end)]
+	-- 		end
+	-- 	end)
+
 	terra SphereImplicitShapeT:isovalue(point: SpaceVec) : real
 		return point:distSq(self.center) - self.rSq
+		-- return isoval([SpaceVec.entryExpList(point)], [SpaceVec.entryExpList(`self.center)], self.rSq)
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
 

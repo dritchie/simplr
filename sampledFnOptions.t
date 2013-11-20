@@ -114,7 +114,7 @@ local over = ad.def.makePrimitive(
 		return (1.0-alpha)*curr + alpha*new
 	end,
 	function(T1, T2, T3)
-		return terra(v: ad.def.DualNumPtr, curr: T1, new: T2, alpha: T3)
+		return terra(v: ad.num, curr: T1, new: T2, alpha: T3)
 			accumadj(v, alpha, val(new) - val(curr))
 			accumadj(v, new, val(alpha))
 			accumadj(v, curr, 1.0 - val(alpha))
