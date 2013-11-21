@@ -12,7 +12,7 @@ local smoothAlphaThresh = 0.02
 local logSmoothAlphaThresh = math.log(smoothAlphaThresh)
 
 -- AD primitive for isovalue smoothing calculations
-local val = ad.def.val
+local val = ad.val
 local accumadj = ad.def.accumadj
 local smoothAlpha = ad.def.makePrimitive(
 	terra(isoval: double, smoothParam: double)
@@ -20,9 +20,9 @@ local smoothAlpha = ad.def.makePrimitive(
 	end,
 	function(T1, T2)
 		return terra(v: ad.num, isoval: T1, smoothParam: T2)
-			var spv = val(smoothParam)
-			accumadj(v, isoval, -val(v)/spv)
-			accumadj(v, smoothParam, val(v)*val(isoval)/(spv*spv))
+			var spv = val(smoothParam())
+			accumadj(v, isoval(), -val(v)/spv)
+			accumadj(v, smoothParam, val(v)*val(isoval())/(spv*spv))
 		end
 	end)
 

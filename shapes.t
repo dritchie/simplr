@@ -133,7 +133,7 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 
 	-- -- AD primitive for sphere isosurface function
-	-- local val = ad.def.val
+	-- local val = ad.val
 	-- local accumadj = ad.def.accumadj
 	-- local pointComps = terralib.newlist()
 	-- for i=1,SpaceVec.Dimension do pointComps:insert(symbol(SpaceVec.RealType)) end

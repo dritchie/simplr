@@ -107,7 +107,7 @@ local SampleInterpFns =
 }
 
 -- AD primitive for the over operator
-local val = ad.def.val
+local val = ad.val
 local accumadj = ad.def.accumadj
 local over = ad.def.makePrimitive(
 	terra(curr: double, new: double, alpha: double)
@@ -115,9 +115,9 @@ local over = ad.def.makePrimitive(
 	end,
 	function(T1, T2, T3)
 		return terra(v: ad.num, curr: T1, new: T2, alpha: T3)
-			accumadj(v, alpha, val(new) - val(curr))
-			accumadj(v, new, val(alpha))
-			accumadj(v, curr, 1.0 - val(alpha))
+			accumadj(v, alpha(), val(new()) - val(curr()))
+			accumadj(v, new(), val(alpha()))
+			accumadj(v, curr(), 1.0 - val(alpha()))
 		end
 	end)
 
