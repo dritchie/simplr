@@ -275,6 +275,21 @@ Vec = templatize(function(real, dim)
 			[zip(entryList(vec1), entryList(vec2), fn)]
 		end
 	end
+	function VecT.foreachTuple(fn, ...)
+		local entryLists = {}
+		for i=1,select("#",...) do
+			table.insert(entryLists, entryList((select(i,...))))
+		end
+		local stmts = {}
+		for i=1,#entryLists[1] do
+			local entries = {}
+			for _,eList in ipairs(entryLists) do
+				table.insert(entries, eList[i])
+			end
+			table.insert(stmts, fn(unpack(entries)))
+		end
+		return stmts
+	end
 	function VecT.entryExpList(vec)
 		return entryList(vec)
 	end
