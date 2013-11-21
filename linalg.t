@@ -322,6 +322,94 @@ Vec = templatize(function(real, dim)
 end)
 
 
+-- Convenience method for defining AD primitives that take Vec arguments
+function Vec.makeADPrimitive(argTypes, fwdMacro, adjMacro)
+	-- Pack a block of scalars into a vector
+	local vecpack = macro(function(...)
+		local scalars = {...}
+		local typ = (select(1,...)):gettype()
+		return `[Vec(typ, #scalars)].stackAlloc([scalars])
+	end)
+	-- Generate code to pack blocks of symbols into vectors
+	local function packBlocks(symBlocks, doTouch)
+		local function touch(x) if doTouch then return `[x]() else return x end end
+		local function touchAll(xs)
+			if doTouch then
+				local out = {}
+				for _,x in ipairs(xs) do table.insert(out, touch(x)) end
+				xs = out
+			end
+			return xs
+		end
+		local args = {}
+		for _,syms in ipairs(symBlocks) do
+			if #syms == 1 then
+				table.insert(args, touch(syms[1]))
+			else
+				table.insert(args, `vecpack([touchAll(syms)]))
+			end
+		end
+		return args
+	end
+	-- Figure out how many components we have per type
+	local compsPerType = {}
+	for _,t in ipairs(argTypes) do
+		-- argType must either be a double or a Vec of doubles
+		assert(t == double or (t.__generatorTemplate == Vec and t.RealType == double))
+		local comps = 0
+		if t.__generatorTemplate == Vec then comps = t.Dimension else comps = 1 end
+		table.insert(compsPerType, comps)
+	end
+	-- Build symbols to refer to forward function parameters
+	local symbolBlocks = {}
+	for _,numc in ipairs(compsPerType) do
+		local syms = {}
+		for i=1,numc do table.insert(syms, symbol(double)) end
+		table.insert(symbolBlocks, syms)
+	end
+	local allsyms = util.concattables(unpack(symbolBlocks))
+	-- Build the forward function
+	local terra fwdFn([allsyms])
+		return fwdMacro([packBlocks(symbolBlocks)])
+	end
+	-- Now, the adjoint function
+	local function adjFn(...)
+		local adjArgTypes = {}
+		symbolBlocks = {}
+		local index = 1
+		-- Build symbol blocks
+		for _,numc in ipairs(compsPerType) do
+			local typ = (select(index,...))
+			table.insert(adjArgTypes, typ)
+			index = index + numc
+			local syms = {}
+			for i=1,numc do table.insert(syms, symbol(typ)) end
+			table.insert(symbolBlocks, syms)
+		end
+		allsyms = util.concattables(unpack(symbolBlocks))
+		return terra(v: ad.num, [allsyms])
+			return adjMacro(v, [packBlocks(symbolBlocks, true)])
+		end
+	end
+	-- Construct an AD primitive
+	local adprim = ad.def.makePrimitive(fwdFn, adjFn, compsPerType)
+	-- Return a wrapper for this AD primitive that unpacks vectors into
+	--    blocks of scalars.
+	return macro(function(...)
+		local unpackedArgs = {}
+		for i=1,select("#",...) do
+			local arg = (select(i,...))
+			local typ = arg:gettype()
+			if typ.__generatorTemplate == Vec then
+				unpackedArgs = util.concattables(unpackedArgs, typ.entryExpList(arg))
+			else
+				table.insert(unpackedArgs, arg)
+			end
+		end
+		return `adprim([unpackedArgs])
+	end)
+end
+
 
 return
 {

@@ -135,56 +135,27 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 	-- AD primitive for sphere isosurface function
 	local val = ad.val
 	local accumadj = ad.def.accumadj
-	local pointComps = terralib.newlist()
-	local SVec = Vec(double, SpaceVec.Dimension)
-	for i=1,SVec.Dimension do pointComps:insert(symbol(double)) end
-	local centerComps = terralib.newlist()
-	for i=1,SVec.Dimension do centerComps:insert(symbol(double)) end
-	local rSq = symbol(double)
-	local allsyms = util.concattables(pointComps, centerComps, {rSq})
-	local compsPerType = {SVec.Dimension, SVec.Dimension, 1}
-	local isoval = ad.def.makePrimitive(
-		terra([allsyms]) : double
-			var point = SVec.stackAlloc([pointComps])
-			var center = SVec.stackAlloc([centerComps])
-			return point:distSq(center) - [rSq]
-		end,
-		function(...)
-			local ptype = (select(1,...))
-			local ctype = (select(1+SpaceVec.Dimension,...))
-			local rtype = (select(1+2*SpaceVec.Dimension,...))
-			pointComps = terralib.newlist()
-			for i=1,SpaceVec.Dimension do pointComps:insert(symbol(ptype)) end
-			centerComps = terralib.newlist()
-			for i=1,SpaceVec.Dimension do centerComps:insert(symbol(ctype)) end
-			rSq = symbol(rtype)
-			allsyms = util.concattables(pointComps, centerComps, {rSq})
-			local PVec = Vec(ptype.ValueType, SpaceVec.Dimension)
-			local CVec = Vec(ctype.ValueType, SpaceVec.Dimension)
-			
-			local function touchAll(exps)
-				local t = {}
-				for _,e in ipairs(exps) do table.insert(t, `[e]()) end
-				return t
-			end
-
-			return terra(v: ad.num, [allsyms])
-				var point = PVec.stackAlloc([touchAll(pointComps)])
-				var center = CVec.stackAlloc([touchAll(centerComps)])
-				accumadj(v, [rSq](), -1.0)
-				[PVec.foreachPair(point, center, function(p, c)
+	local isoval = Vec.makeADPrimitive(
+		{Vec(double, SpaceVec.Dimension), Vec(double, SpaceVec.Dimension), double},
+		macro(function(point, center, rSq)
+			return `point:distSq(center) - rSq
+		end),
+		macro(function(v, point, center, rSq)
+			local VecT = center:gettype()
+			return quote
+				accumadj(v, rSq, -1.0)
+				[VecT.foreachPair(point, center, function(p, c)
 					return quote
 						accumadj(v, p, 2*(val(p) - val(c)))
 						accumadj(v, c, 2*(val(c) - val(p)))
 					end
 				end)]
 			end
-		end,
-		compsPerType)
+		end))
 
 	terra SphereImplicitShapeT:isovalue(point: SpaceVec) : real
 		-- return point:distSq(self.center) - self.rSq
-		return isoval([util.concattables(SpaceVec.entryExpList(point), SpaceVec.entryExpList(`self.center), {`self.rSq})])
+		return isoval(point, self.center, self.rSq)
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
 
