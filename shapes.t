@@ -200,7 +200,66 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 		self.sqLen = self.topMinusBot:normSq()
 	end
 
-	local C = terralib.includec("stdio.h")
+	-- AD primitive for capsule isosurface function
+	local val = ad.val
+	local accumadj = ad.def.accumadj
+	local VecT = Vec(double, SpaceVec.Dimension)
+	local isoval = Vec.makeADPrimitive(
+		{VecT, VecT, VecT, double, double},
+		macro(function(point, bot, top, rSq, sqLen)
+			return quote
+				var topMinusBot = top - bot
+				var t = (point - bot):dot(topMinusBot) / sqLen
+				-- Beyond the ends of the cylinder; treat as semispherical caps
+				if t < 0.0 then return point:distSq(bot) - rSq end
+				if t > 1.0 then return point:distSq(top) - rSq end
+				-- Inside the bounds of the cylinder; treat as shaft
+				var proj = bot + t*topMinusBot
+				var result = point:distSq(proj) - rSq
+			in
+				result
+			end
+		end),
+		macro(function(v, point, bot, top, rSq, sqLen)
+			local VecT = bot:gettype()
+			return quote
+				accumadj(v, rSq, -1.0)
+				var valbot = val(bot)
+				var topMinusBot = val(top) - valbot
+				var pointMinusBot = val(point) - valbot
+				var t = pointMinusBot:dot(topMinusBot) / val(sqLen)
+				if t < 0.0 then
+					[VecT.foreachPair(point, bot, function(p, b)
+						return quote
+							accumadj(v, p, 2*(val(p) - val(b)))
+							accumadj(v, b, 2*(val(b) - val(p)))
+						end
+					end)]
+				elseif t > 1.0 then
+					[VecT.foreachPair(point, top, function(p, t)
+						return quote
+							accumadj(v, p, 2*(val(p) - val(t)))
+							accumadj(v, t, 2*(val(t) - val(p)))
+						end
+					end)]
+				else
+					-- From Wolfram Alpha...fingers crossed...
+					var tmbnormsq = topMinusBot:normSq()
+					var lsq = val(sqLen)
+					accumadj(v, sqLen, -2*pointMinusBot:normSq()*tmbnormsq*(tmbnormsq - lsq) / (lsq*lsq*lsq))
+					[VecT.foreachTuple(function(p, b, t)
+						return quote
+							var bmp = val(b) - val(p)
+							var bmt = val(b) - val(t)
+							var bmtSq = bmt*bmt
+							accumadj(v, p, -2*bmp*(bmtSq-lsq)*(bmtSq-lsq) / (lsq*lsq))
+							accumadj(v, b, 2*bmp*(bmtSq-lsq)*(bmt*(3*val(b) - 2*val(p) - val(t)) - lsq) / (lsq*lsq))
+							accumadj(v, t, -4*bmp*bmp*bmt*(bmtSq-lsq) / (lsq*lsq))
+						end
+					end, point, bot, top)]
+				end
+			end
+		end))
 
 	terra CapsuleImplicitShapeT:isovalue(point: SpaceVec) : real
 		var t = (point - self.bot):dot(self.topMinusBot) / self.sqLen
@@ -210,6 +269,8 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 		-- Inside the bounds of the cylinder; treat as shaft
 		var proj = self.bot + t*self.topMinusBot
 		return point:distSq(proj) - self.rSq
+		
+		-- return isoval(point, self.bot, self.top, self.rSq, self.sqLen)
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
 
