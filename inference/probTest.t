@@ -22,6 +22,7 @@ local SampledFunction2d1d = SampledFunction(Vec2d, Color1d)
 
 local circlesModule = terralib.require("circles")
 local polylineModule = terralib.require("polyline")
+local grammarModule = terralib.require("grammar")
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
 
@@ -115,9 +116,9 @@ end
 
 local numsamps = 2000
 
-local doGlobalAnnealing = true
+local doGlobalAnnealing = false
 local initialGlobalTemp = 10
-local doLocalErrorTempering = true
+local doLocalErrorTempering = false
 
 -- Global variables
 local inferenceTime = global(double)
@@ -143,8 +144,10 @@ local scheduleFunction = macro(function(iter, currTrace)
 	end
 end)
 
-local pmodule = polylineModule(true, inferenceTime)
-local targetImgName = "targets/squiggle_200.png"
+local pmodule = grammarModule(true, inferenceTime)
+local targetImgName = "targets/tree_250.png"
+-- local pmodule = polylineModule(true, inferenceTime)
+-- local targetImgName = "targets/squiggle_200.png"
 -- local pmodule = circlesModule(true, inferenceTime)
 -- local targetImgName = "targets/symbol_200.png"
 
@@ -158,7 +161,8 @@ local program = bayesProgram(pmodule, lmodule)
 
 -- local kernel = RandomWalk()
 -- local kernel = ADRandomWalk()
-local kernel = HMC()
+-- local kernel = HMC()
+local kernel = LARJ(HMC())()
 
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
