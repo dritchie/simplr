@@ -47,8 +47,9 @@ local PolylinesRetType = templatize(function(real)
 	return PolylinesRetTypeT
 end)
 
-local function polylineModule(doSmoothing, inferenceTime)
+local function polylineModule(inferenceTime, doSmoothing)
 	return function()
+		if doSmoothing == nil then doSmoothing = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local SampledFunctionType = nil

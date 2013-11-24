@@ -52,8 +52,9 @@ local CirclesRetType = templatize(function(real)
 	return CircleRetTypeT
 end)
 
-local function circlesModule(doSmoothing, inferenceTime)
+local function circlesModule(inferenceTime, doSmoothing)
 	return function()
+		if doSmoothing == nil then doSmoothing = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local CircleT = Circle(real)

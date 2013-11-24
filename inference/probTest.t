@@ -115,10 +115,25 @@ end
 ------------------
 
 local numsamps = 2000
-
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
+local constraintStrength = 2000
+local expandFactor = 1
+
+local priorModule = grammarModule
+local targetImgName = "targets/tree_250.png"
+-- local priorModule = polylineModule
+-- local targetImgName = "targets/squiggle_200.png"
+-- local priorModule = circlesModule
+-- local targetImgName = "targets/symbol_200.png"
+
+-- local kernel = RandomWalk()
+-- local kernel = ADRandomWalk()
+-- local kernel = HMC({usePrimalLP=true})
+local kernel = LARJ(HMC({usePrimalLP=true}))()
+
+-------------------
 
 -- Global variables
 local inferenceTime = global(double)
@@ -144,32 +159,15 @@ local scheduleFunction = macro(function(iter, currTrace)
 	end
 end)
 
-local pmodule = grammarModule(true, inferenceTime)
-local targetImgName = "targets/tree_250.png"
--- local pmodule = polylineModule(true, inferenceTime)
--- local targetImgName = "targets/squiggle_200.png"
--- local pmodule = circlesModule(true, inferenceTime)
--- local targetImgName = "targets/symbol_200.png"
+local pmodule = priorModule(inferenceTime)
 
-local constraintStrength = 2000
-local expandFactor = 1
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
 local lmodule = mseLikelihoodModule(pmodule, targetData, constraintStrength,
 	inferenceTime, zeroTargetLLSum, doLocalErrorTempering)
 local program = bayesProgram(pmodule, lmodule)
 
--- local kernel = RandomWalk()
--- local kernel = ADRandomWalk()
--- local kernel = HMC()
-local kernel = LARJ(HMC())()
-
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
 renderVideo(pmodule, targetData, values, "renders", "movie")
-
-
-
-
-
 

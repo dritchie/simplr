@@ -18,10 +18,6 @@ local shapes = terralib.require("shapes")
 
 local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
--- local C = terralib.includecstring [[
--- #include <stdio.h>
--- ]]
-
 --------------------------------
 
 
@@ -52,8 +48,9 @@ local GrammarRetType = templatize(function(real)
 	return GrammarRetTypeT
 end)
 
-local function grammarModule(doSmoothing, inferenceTime)
+local function grammarModule(inferenceTime, doSmoothing)
 	return function()
+		if doSmoothing == nil then doSmoothing = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local SampledFunctionType = nil
