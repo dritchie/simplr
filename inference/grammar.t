@@ -18,6 +18,9 @@ local shapes = terralib.require("shapes")
 
 local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
+-- local C = terralib.includecstring [[
+-- #include <stdio.h>
+-- ]]
 
 --------------------------------
 
@@ -118,7 +121,8 @@ local function grammarModule(doSmoothing, inferenceTime)
 			var rootPoint = Vec2.stackAlloc(0.458, 0.068)
 			var rootDir = Vec2.stackAlloc(0.0, 1.0)
 			-- Just so we're guaranteed to have at least one continuous nonstructural
-			rootDir = rotate(rootDir, ngaussian(anglePriorMean, anglePriorSD))
+			var ang = ngaussian(anglePriorMean, anglePriorSD)
+			rootDir = rotate(rootDir, ang)
 
 			grammarRec(rootPoint, rootDir, &segs)
 
