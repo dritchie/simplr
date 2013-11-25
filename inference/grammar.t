@@ -90,7 +90,8 @@ local function grammarModule(inferenceTime, doSmoothing)
 		local anglePriorSD = math.pi/6.0
 		local lineThickness = 0.007
 		local branchFactor = 2
-		local branchProb = 0.25
+		-- local branchProb = 0.25
+		local branchProb = 0.35
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.

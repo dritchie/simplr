@@ -114,7 +114,7 @@ end
 
 ------------------
 
-local numsamps = 2000
+local numsamps = 20000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
@@ -122,16 +122,23 @@ local constraintStrength = 2000
 local expandFactor = 1
 
 local priorModule = grammarModule
-local targetImgName = "targets/tree_250.png"
+local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
 -- local targetImgName = "targets/squiggle_200.png"
 -- local priorModule = circlesModule
 -- local targetImgName = "targets/symbol_200.png"
 
--- local kernel = RandomWalk()
--- local kernel = ADRandomWalk()
--- local kernel = HMC({usePrimalLP=true})
-local kernel = LARJ(HMC({usePrimalLP=true}))()
+local RandomWalkParams = {}
+local HMCParams = {usePrimalLP=true, pmrAlpha=0.5}
+local LARJParams ={jumpFreq=0.3}
+if priorModule == grammarModule then
+	RandomWalkParams.depthBiasBranchFactor = 2
+	LARJParams.depthBiasBranchFactor = 2
+end
+
+local kernel = RandomWalk(RandomWalkParams)
+-- local kernel = HMC(HMCParams)
+-- local kernel = LARJ(HMC(HMCParams))(LARJParams)
 
 -------------------
 
