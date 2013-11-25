@@ -105,7 +105,7 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 	end
 	local terra doRenderFrames() : {} [renderFrames(valueSeq, framebasename)] end
 	doRenderFrames()
-	util.wait(string.format("ffmpeg -y -r 30 -i %s -c:v libx264 -r 30 -pix_fmt yuv420p %s 2>&1",
+	util.wait(string.format("ffmpeg -threads 0 -y -r 30 -i %s -c:v libx264 -r 30 -pix_fmt yuv420p %s 2>&1",
 		framebasename, moviefilename))
 	util.wait(string.format("rm -f %s", framewildcard))
 	print("done.")
