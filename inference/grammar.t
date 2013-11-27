@@ -84,14 +84,14 @@ local function grammarModule(inferenceTime, doSmoothing)
 		end
 
 		-- A bunch of constants. Perhaps factor these out?
-		local lengthAlpha = 10.0
-		local lengthBeta = 0.01
-		local anglePriorMean = 0.0
-		local anglePriorSD = math.pi/6.0
-		local lineThickness = 0.007
+		local lengthAlpha = `10.0
+		local lengthBeta = `0.01
+		local anglePriorMean = `0.0
+		local anglePriorSD = `[math.pi]/6.0
+		local lineThickness = `0.007
 		local branchFactor = 2
-		-- local branchProb = 0.25
-		local branchProb = 0.35
+		-- local branchProb = `0.25
+		local branchProb = `0.35
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.

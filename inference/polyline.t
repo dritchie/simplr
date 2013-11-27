@@ -85,19 +85,19 @@ local function polylineModule(inferenceTime, doSmoothing)
 		end
 
 		-- A bunch of constants. Perhaps factor these out?
-		-- local numSegs = 40
-		local numSegs = 20
-		local startPosMin = 0.0
-		local startPosMax = 1.0
-		local startDirMin = 0.0
-		local startDirMax = 2.0*math.pi
-		-- local lengthMin = 0.01
-		-- local lengthMax = 0.1
-		local lengthAlpha = 10.0
-		local lengthBeta = 0.01
-		local anglePriorMean = 0.0
-		local anglePriorSD = math.pi/6.0
-		local lineThickness = 0.01
+		-- local numSegs = `40
+		local numSegs = `20
+		local startPosMin = `0.0
+		local startPosMax = `1.0
+		local startDirMin = `0.0
+		local startDirMax = `2.0*[math.pi]
+		-- local lengthMin = `0.01
+		-- local lengthMax = `0.1
+		local lengthAlpha = `10.0
+		local lengthBeta = `0.01
+		local anglePriorMean = `0.0
+		local anglePriorSD = `[math.pi]/6.0
+		local lineThickness = `0.01
 
 		-- The 'prior' part of the program which generates the polyine to be rendered.
 		local polyline = pfn(terra()

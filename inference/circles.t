@@ -80,11 +80,11 @@ local function circlesModule(inferenceTime, doSmoothing)
 		end)
 
 		-- Constants
-		local numCircles = 40
-		local posMin = 0.0
-		local posMax = 1.0
-		local radMin = 0.025
-		local radMax = 0.1
+		local numCircles = `40
+		local posMin = `0.0
+		local posMax = `1.0
+		local radMin = `0.025
+		local radMax = `0.1
 
 		local circles = pfn(terra()
 			var circs = [Vector(CircleT)].stackAlloc(numCircles, CircleT { Vec2.stackAlloc(0.0), 1.0 } )
