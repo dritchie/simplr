@@ -30,7 +30,7 @@ end)
 
 local VinesRetType = templatize(function(real)
 	local Vec2 = Vec(real, 2)
-	local struct LineSeg { start: Vec2, stop: Vec2, width: double }
+	local struct LineSeg { start: Vec2, stop: Vec2, width: real }
 	local struct VinesRetTypeT { segs: Vector(LineSeg), smoothParam: double }
 	VinesRetTypeT.LineSeg = LineSeg
 	terra VinesRetTypeT:__construct() m.init(self.segs) end
@@ -85,30 +85,31 @@ local function vinesModule(inferenceTime, doSmoothing)
 
 		-- Constants
 		local maxBranches = 4
-		local branchProb = 0.15
+		local initialBranchProb = 0.8
+		local finalBranchProb = 0.0
+		local branchProbMult = 0.85
+		local branchProb = 0.24
 		local numStepsLambda = 6
 		local lengthShape = `10.0
 		local lengthMean = 0.025
 		local angleMean = `0.0
-		local angleSD = math.pi/6.0
-		local widthShape = `40.0
-		local widthMean = 0.005
-		local depthWidthScale = `0.25
+		local angleSD = math.pi/4.0
+		local initialWidthShape = `100.0
+		local initialWidthMean = 0.008
+		local widthMultShape = `100.0
+		local widthMultMean = 0.1
 		local branchSpawnShape = `1.0
 		local branchSpawnMean = 0.1
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.
 		local vinesRec = pfn()
-		local function genBranches(depth, lengths, dirs, allSegs)
-			local branches = {}
+		local function genBranches(depth, lineWidth, branchProb, totalLength, lengths, dirs, allSegs)
+			local stmts = {}
 			for i=1,maxBranches do
-				table.insert(branches, quote
-					var numSegs = lengths.size
-					var segStartIndex = allSegs.size - numSegs
-					var totalLength = lengths(0)
-					for i=1,numSegs do totalLength = totalLength + lengths(i) end
+				table.insert(stmts, quote
 					if flip(branchProb) then
+						var segStartIndex = allSegs.size - lengths.size
 						-- Decide at which point along the parent vine this child
 						--    should spawn
 						var startT = 1.0 - ngammaMS(branchSpawnMean, branchSpawnShape)
@@ -124,18 +125,19 @@ local function vinesModule(inferenceTime, doSmoothing)
 						var seg = allSegs(segStartIndex+whichSeg)
 						var startPoint = lerp(seg.start, seg.stop, t)
 						var startDir = dirs(whichSeg)
-						vinesRec(depth+1, startPoint, startDir, allSegs)
+						vinesRec(depth+1, lineWidth, startPoint, startDir, allSegs)
 					end
 				end)
 			end
-			return branches
+			return stmts
 		end
-		vinesRec:define(terra(depth: uint, currPoint: Vec2, currDir: Vec2, segs: &Vector(LineSeg)) : {}
+		vinesRec:define(terra(depth: uint, currWidth: real, currPoint: Vec2, currDir: Vec2, segs: &Vector(LineSeg)) : {}
 			-- First, generate the vine itself
-			var lineWidth = ngammaMS(widthMean, widthShape) / (depthWidthScale*depth)
+			var lineWidth = currWidth * (1.0 - ad.math.fmin(ngammaMS(widthMultMean, widthMultShape), 1.0))
 			var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
-			var lengths = [Vector(double)].stackAlloc(numSteps, 0.0)
+			var lengths = [Vector(real)].stackAlloc(numSteps, 0.0)
 			var dirs = [Vector(Vec2)].stackAlloc(numSteps, Vec2.stackAlloc())
+			var totalLength = real(0.0)
 			for i=0,numSteps do
 				var len = ngammaMS(lengthMean, lengthShape)
 				var dir = rotate(currDir, ngaussian(angleMean, angleSD))
@@ -144,9 +146,11 @@ local function vinesModule(inferenceTime, doSmoothing)
 				currPoint = newPoint
 				lengths(i) = len
 				dirs(i) = dir
+				totalLength = totalLength + len
 			end
 			-- Then, (potentially) generate recursive branches
-			[genBranches(depth, lengths, dirs, segs)]
+			var branchProb = lerp(initialBranchProb, finalBranchProb, 1.0 - ad.math.pow(branchProbMult, depth))
+			[genBranches(depth, lineWidth, branchProb, totalLength, lengths, dirs, segs)]
 			-- Clean up
 			m.destruct(lengths)
 			m.destruct(dirs)
@@ -158,8 +162,9 @@ local function vinesModule(inferenceTime, doSmoothing)
 			-- Just so we're guaranteed to have at least one continuous nonstructural
 			var ang = ngaussian(angleMean, angleSD)
 			rootDir = rotate(rootDir, ang)
+			var initialWidth = ngammaMS(initialWidthMean, initialWidthShape)
 
-			vinesRec(1, rootPoint, rootDir, &segs)
+			vinesRec(1, initialWidth, rootPoint, rootDir, &segs)
 
 			var smoothingAmount : double
 			[(not doSmoothing) and quote end or
