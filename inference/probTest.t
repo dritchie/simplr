@@ -114,7 +114,7 @@ end
 
 ------------------
 
-local numsamps = 20000
+local numsamps = 2000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
@@ -129,16 +129,17 @@ local targetImgName = "targets/helix_250.png"
 -- local targetImgName = "targets/symbol_200.png"
 
 local RandomWalkParams = {}
-local HMCParams = {usePrimalLP=true, pmrAlpha=0.5}
-local LARJParams ={jumpFreq=0.3}
-if priorModule == grammarModule then
-	RandomWalkParams.depthBiasBranchFactor = 2
-	LARJParams.depthBiasBranchFactor = 2
-end
+local HMCParams = {usePrimalLP=true, pmrAlpha=nil}
+local LARJParams ={jumpFreq=0.3, intervals=0}
 
-local kernel = RandomWalk(RandomWalkParams)
+-- The following will be nil for modules that do not specify a branch factor
+RandomWalkParams.depthBiasBranchFactor = priorModule.branchFactor
+LARJParams.depthBiasBranchFactor = priorModule.branchFactor
+
+-- local kernel = RandomWalk(RandomWalkParams)
 -- local kernel = HMC(HMCParams)
--- local kernel = LARJ(HMC(HMCParams))(LARJParams)
+local kernel = LARJ(HMC(HMCParams))(LARJParams)
+-- local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
 
 -------------------
 

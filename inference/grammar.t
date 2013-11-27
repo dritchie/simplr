@@ -149,6 +149,7 @@ local function grammarModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = grammar,
+			branchFactor = branchFactor,
 			sample = renderSegments,
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
