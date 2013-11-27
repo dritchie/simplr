@@ -132,18 +132,14 @@ local RandomWalkParams = {}
 local HMCParams = {usePrimalLP=true, pmrAlpha=nil}
 local LARJParams ={jumpFreq=0.3, intervals=0}
 
--- The following will be nil for modules that do not specify a branch factor
-RandomWalkParams.depthBiasBranchFactor = priorModule.branchFactor
-LARJParams.depthBiasBranchFactor = priorModule.branchFactor
+local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
+LARJParams.doDepthBiasedSelection = doDepthBiasedSelection
 
--- local kernel = RandomWalk(RandomWalkParams)
--- local kernel = HMC(HMCParams)
 local kernel = LARJ(HMC(HMCParams))(LARJParams)
 -- local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
 
 -------------------
 
--- Global variables
 local inferenceTime = global(double)
 local zeroTargetLLSum = global(double)
 

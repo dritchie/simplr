@@ -87,18 +87,17 @@ local function grammarModule(inferenceTime, doSmoothing)
 		local lengthAlpha = `10.0
 		local lengthBeta = `0.01
 		local anglePriorMean = `0.0
-		local anglePriorSD = `[math.pi]/6.0
-		local lineThickness = `0.007
-		local branchFactor = 2
-		-- local branchProb = `0.25
-		local branchProb = `0.35
+		local anglePriorSD = math.pi/6.0
+		local lineThickness = 0.007
+		local maxBranches = 2
+		local branchProb = 0.35
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.
 		local grammarRec = pfn()
 		local function genBranches(currPoint, currDir, segs)
 			local branches = {}
-			for i=1,branchFactor do
+			for i=1,maxBranches do
 				table.insert(branches, quote
 					if flip(branchProb) then
 						var len = ngamma(lengthAlpha, lengthBeta)
@@ -133,7 +132,7 @@ local function grammarModule(inferenceTime, doSmoothing)
 			return RetType.stackAlloc(segs, smoothingAmount)
 		end)
 
-		-- Rendering polyline (used by likelihood module)
+		-- Rendering
 		local terra renderSegments(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
 			sampler:clear()
 			for i=0,retval.segs.size do
@@ -149,7 +148,7 @@ local function grammarModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = grammar,
-			branchFactor = branchFactor,
+			doDepthBiasedSelection = true,
 			sample = renderSegments,
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
