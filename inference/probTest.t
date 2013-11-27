@@ -23,6 +23,8 @@ local SampledFunction2d1d = SampledFunction(Vec2d, Color1d)
 local circlesModule = terralib.require("circles")
 local polylineModule = terralib.require("polyline")
 local grammarModule = terralib.require("grammar")
+local vinesModule = terralib.require("vines")
+
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
 
@@ -121,8 +123,10 @@ local doLocalErrorTempering = false
 local constraintStrength = 2000
 local expandFactor = 1
 
-local priorModule = grammarModule
-local targetImgName = "targets/helix_250.png"
+local priorModule = vinesModule
+local targetImgName = "targets/knot_250.png"
+-- local priorModule = grammarModule
+-- local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
 -- local targetImgName = "targets/squiggle_200.png"
 -- local priorModule = circlesModule
@@ -135,8 +139,8 @@ local LARJParams ={jumpFreq=0.3, intervals=0}
 local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
 LARJParams.doDepthBiasedSelection = doDepthBiasedSelection
 
-local kernel = LARJ(HMC(HMCParams))(LARJParams)
--- local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
+-- local kernel = LARJ(HMC(HMCParams))(LARJParams)
+local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
 
 -------------------
 
