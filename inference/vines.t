@@ -71,8 +71,8 @@ local function vinesModule(inferenceTime, doSmoothing)
 		local ngaussian = macro(function(mean, sd)
 			return `gaussian([mean], [sd], {structural=false})
 		end)
-		local ngamma = macro(function(a, b)
-			return `gamma([a], [b], {structural=false})
+		local ngammaMS = macro(function(m, s)
+			return `gammaMeanShape([m], [s], {structural=false})
 		end)
 
 		local terra rotate(dir: Vec2, angle: real)
@@ -85,17 +85,17 @@ local function vinesModule(inferenceTime, doSmoothing)
 
 		-- Constants
 		local maxBranches = 4
-		local branchProb = 0.1
+		local branchProb = 0.15
 		local numStepsLambda = 6
-		local lengthAlpha = `10.0
-		local lengthBeta = 0.0025
+		local lengthShape = `10.0
+		local lengthMean = 0.025
 		local angleMean = `0.0
 		local angleSD = math.pi/6.0
-		local widthAlpha = `20.0
-		local widthBeta = 0.0003
+		local widthShape = `40.0
+		local widthMean = 0.005
 		local depthWidthScale = `0.25
-		local branchSpawnAlpha = `1.0
-		local branchSpawnBeta = 0.1
+		local branchSpawnShape = `1.0
+		local branchSpawnMean = 0.1
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.
@@ -111,7 +111,7 @@ local function vinesModule(inferenceTime, doSmoothing)
 					if flip(branchProb) then
 						-- Decide at which point along the parent vine this child
 						--    should spawn
-						var startT = 1.0 - ngamma(branchSpawnAlpha, branchSpawnBeta)
+						var startT = 1.0 - ngammaMS(branchSpawnMean, branchSpawnShape)
 						startT = ad.math.fmax(startT, 0.0)  -- Extremely unlikely, but best to be safe
 						var lengthAccum = lengths(0)
 						var whichSeg = 0U
@@ -132,12 +132,12 @@ local function vinesModule(inferenceTime, doSmoothing)
 		end
 		vinesRec:define(terra(depth: uint, currPoint: Vec2, currDir: Vec2, segs: &Vector(LineSeg)) : {}
 			-- First, generate the vine itself
-			var lineWidth = ngamma(widthAlpha, widthBeta) / (depthWidthScale*depth)
+			var lineWidth = ngammaMS(widthMean, widthShape) / (depthWidthScale*depth)
 			var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
 			var lengths = [Vector(double)].stackAlloc(numSteps, 0.0)
 			var dirs = [Vector(Vec2)].stackAlloc(numSteps, Vec2.stackAlloc())
 			for i=0,numSteps do
-				var len = ngamma(lengthAlpha, lengthBeta)
+				var len = ngammaMS(lengthMean, lengthShape)
 				var dir = rotate(currDir, ngaussian(angleMean, angleSD))
 				var newPoint = currPoint + len*dir
 				segs:push(LineSeg{currPoint, newPoint, lineWidth})
