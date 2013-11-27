@@ -133,8 +133,8 @@ local targetImgName = "targets/knot_250.png"
 -- local targetImgName = "targets/symbol_200.png"
 
 local RandomWalkParams = {}
-local HMCParams = {usePrimalLP=true, pmrAlpha=nil}
-local LARJParams ={jumpFreq=0.3, intervals=0}
+local HMCParams = {usePrimalLP=true, pmrAlpha=0.0}
+local LARJParams = {intervals=0}
 
 local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
 LARJParams.doDepthBiasedSelection = doDepthBiasedSelection
