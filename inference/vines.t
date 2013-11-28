@@ -84,10 +84,14 @@ local function vinesModule(inferenceTime, doSmoothing)
 		end
 
 		-- Constants
-		local maxBranches = 4
-		local initialBranchProb = 0.8
-		local finalBranchProb = 0.0
-		local branchProbMult = 0.8
+		local maxBranches = 2
+		local initialBranchProb = 0.45
+		local finalBranchProb = 0.45
+		local branchProbMult = 1.0
+		-- local maxBranches = 4
+		-- local initialBranchProb = 0.75
+		-- local finalBranchProb = 0.0
+		-- local branchProbMult = 0.7
 		local numStepsLambda = 6
 		local lengthShape = `10.0
 		local lengthMean = 0.025
