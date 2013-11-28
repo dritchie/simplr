@@ -115,8 +115,9 @@ local function vinesModule(inferenceTime, doSmoothing)
 						-- First, generate the vine itself
 						var lineWidth = currWidth * (1.0 - ad.math.fmin(ngammaMS(widthMultMean, widthMultShape), 1.0))
 						var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
-						var len = ngammaMS(lengthMean, lengthShape)
+						-- var len = ngammaMS(lengthMean, lengthShape)
 						for i=0,numSteps do
+							var len = ngammaMS(lengthMean, lengthShape)
 							currDir = rotate(currDir, ngaussian(angleMean, angleSD))
 							var newPoint = currPoint + len*currDir
 							allSegs:push(LineSeg{currPoint, newPoint, lineWidth})
