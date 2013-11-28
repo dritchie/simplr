@@ -96,7 +96,7 @@ local function vinesModule(inferenceTime, doSmoothing)
 		local lengthShape = `10.0
 		local lengthMean = 0.025
 		local angleMean = `0.0
-		local angleSD = math.pi/4.0
+		local angleSD = math.pi/6.0
 		local initialWidthShape = `100.0
 		local initialWidthMean = 0.01
 		local widthMultShape = `100.0
@@ -107,58 +107,30 @@ local function vinesModule(inferenceTime, doSmoothing)
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.
 		local vinesRec = pfn()
-		local function genBranches(depth, lineWidth, branchProb, totalLength, lengths, dirs, allSegs)
+		local function genBranches(depth, currWidth, branchProb, currPoint, currDir, allSegs)
 			local stmts = {}
 			for i=1,maxBranches do
 				table.insert(stmts, quote
 					if flip(branchProb) then
-						var segStartIndex = allSegs.size - lengths.size
-						-- Decide at which point along the parent vine this child
-						--    should spawn
-						var startT = 1.0 - ngammaMS(branchSpawnMean, branchSpawnShape)
-						startT = ad.math.fmax(startT, 0.0)  -- Extremely unlikely, but best to be safe
-						var lengthAccum = lengths(0)
-						var whichSeg = 0U
-						while lengthAccum/totalLength <= startT and whichSeg < lengths.size-1 do
-							whichSeg = whichSeg + 1
-							lengthAccum = lengthAccum + lengths(whichSeg)
+						-- First, generate the vine itself
+						var lineWidth = currWidth * (1.0 - ad.math.fmin(ngammaMS(widthMultMean, widthMultShape), 1.0))
+						var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
+						var len = ngammaMS(lengthMean, lengthShape)
+						for i=0,numSteps do
+							currDir = rotate(currDir, ngaussian(angleMean, angleSD))
+							var newPoint = currPoint + len*currDir
+							allSegs:push(LineSeg{currPoint, newPoint, lineWidth})
+							currPoint = newPoint
 						end
-						var l = lengths(whichSeg)
-						var t = (totalLength*startT - (lengthAccum - l))/l
-						var seg = allSegs(segStartIndex+whichSeg)
-						var startPoint = lerp(seg.start, seg.stop, t)
-						var startDir = dirs(whichSeg)
-						vinesRec(depth+1, lineWidth, startPoint, startDir, allSegs)
+						vinesRec(depth+1, lineWidth, currPoint, currDir, allSegs)
 					end
 				end)
 			end
 			return stmts
 		end
 		vinesRec:define(terra(depth: uint, currWidth: real, currPoint: Vec2, currDir: Vec2, segs: &Vector(LineSeg)) : {}
-			-- First, generate the vine itself
-			var lineWidth = currWidth * (1.0 - ad.math.fmin(ngammaMS(widthMultMean, widthMultShape), 1.0))
-			var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
-			var lengths = [Vector(real)].stackAlloc(numSteps, 0.0)
-			var dirs = [Vector(Vec2)].stackAlloc(numSteps, Vec2.stackAlloc())
-			var len = ngammaMS(lengthMean, lengthShape)
-			var totalLength = len*numSteps
-			-- var totalLength = real(0.0)
-			for i=0,numSteps do
-				-- var len = ngammaMS(lengthMean, lengthShape)
-				-- totalLength = totalLength + len
-				var dir = rotate(currDir, ngaussian(angleMean, angleSD))
-				var newPoint = currPoint + len*dir
-				segs:push(LineSeg{currPoint, newPoint, lineWidth})
-				currPoint = newPoint
-				lengths(i) = len
-				dirs(i) = dir
-			end
-			-- Then, (potentially) generate recursive branches
 			var branchProb = lerp(initialBranchProb, finalBranchProb, 1.0 - ad.math.pow(branchProbMult, depth))
-			[genBranches(depth, lineWidth, branchProb, totalLength, lengths, dirs, segs)]
-			-- Clean up
-			m.destruct(lengths)
-			m.destruct(dirs)
+			[genBranches(depth, currWidth, branchProb, currPoint, currDir, segs)]
 		end)
 		local vines = pfn(terra()
 			var segs = [Vector(LineSeg)].stackAlloc()
