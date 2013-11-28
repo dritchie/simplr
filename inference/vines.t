@@ -87,15 +87,14 @@ local function vinesModule(inferenceTime, doSmoothing)
 		local maxBranches = 4
 		local initialBranchProb = 0.8
 		local finalBranchProb = 0.0
-		local branchProbMult = 0.85
-		local branchProb = 0.24
+		local branchProbMult = 0.8
 		local numStepsLambda = 6
 		local lengthShape = `10.0
 		local lengthMean = 0.025
 		local angleMean = `0.0
 		local angleSD = math.pi/4.0
 		local initialWidthShape = `100.0
-		local initialWidthMean = 0.008
+		local initialWidthMean = 0.01
 		local widthMultShape = `100.0
 		local widthMultMean = 0.1
 		local branchSpawnShape = `1.0
@@ -116,7 +115,7 @@ local function vinesModule(inferenceTime, doSmoothing)
 						startT = ad.math.fmax(startT, 0.0)  -- Extremely unlikely, but best to be safe
 						var lengthAccum = lengths(0)
 						var whichSeg = 0U
-						while lengthAccum/totalLength <= startT do
+						while lengthAccum/totalLength <= startT and whichSeg < lengths.size-1 do
 							whichSeg = whichSeg + 1
 							lengthAccum = lengthAccum + lengths(whichSeg)
 						end
@@ -137,16 +136,18 @@ local function vinesModule(inferenceTime, doSmoothing)
 			var numSteps = poisson(numStepsLambda) + 1 -- so we never get 0
 			var lengths = [Vector(real)].stackAlloc(numSteps, 0.0)
 			var dirs = [Vector(Vec2)].stackAlloc(numSteps, Vec2.stackAlloc())
-			var totalLength = real(0.0)
+			var len = ngammaMS(lengthMean, lengthShape)
+			var totalLength = len*numSteps
+			-- var totalLength = real(0.0)
 			for i=0,numSteps do
-				var len = ngammaMS(lengthMean, lengthShape)
+				-- var len = ngammaMS(lengthMean, lengthShape)
+				-- totalLength = totalLength + len
 				var dir = rotate(currDir, ngaussian(angleMean, angleSD))
 				var newPoint = currPoint + len*dir
 				segs:push(LineSeg{currPoint, newPoint, lineWidth})
 				currPoint = newPoint
 				lengths(i) = len
 				dirs(i) = dir
-				totalLength = totalLength + len
 			end
 			-- Then, (potentially) generate recursive branches
 			var branchProb = lerp(initialBranchProb, finalBranchProb, 1.0 - ad.math.pow(branchProbMult, depth))
