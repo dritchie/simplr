@@ -116,9 +116,9 @@ end
 
 ------------------
 
-local numsamps = 2000
+local numsamps = 1000
 local doGlobalAnnealing = false
-local initialGlobalTemp = 10
+local initialGlobalTemp = 2
 local doLocalErrorTempering = false
 local constraintStrength = 2000
 local expandFactor = 1
@@ -139,8 +139,8 @@ local LARJParams = {intervals=0}
 local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
 LARJParams.doDepthBiasedSelection = doDepthBiasedSelection
 
--- local kernel = LARJ(HMC(HMCParams))(LARJParams)
-local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
+local kernel = LARJ(HMC(HMCParams))(LARJParams)
+-- local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
 
 -------------------
 
@@ -177,5 +177,7 @@ local program = bayesProgram(pmodule, lmodule)
 
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
-renderVideo(pmodule, targetData, values, "renders", "movie")
+
+local basename = arg[1] or "movie"
+renderVideo(pmodule, targetData, values, "renders", basename)
 
