@@ -31,6 +31,7 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 	terra ImplicitShapeT:__destruct() : {} end
 	inheritance.virtual(ImplicitShapeT, "__destruct")
 
+	inheritance.purevirtual(ImplicitShapeT, "minIsovalue", {}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
 	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBoxT})
@@ -62,6 +63,11 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 		m.delete(self.innerShape)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "__destruct")
+
+	terra ConstantColorImplicitShapeT:minIsovalue() : real
+		return self.innerShape:minIsovalue()
+	end
+	inheritance.virtual(ConstantColorImplicitShapeT, "minIsovalue")
 
 	terra ConstantColorImplicitShapeT:isovalue(point: SpaceVec) : real
 		return self.innerShape:isovalue(point)
@@ -158,6 +164,11 @@ local SphereImplicitShape = templatize(function(SpaceVec, ColorVec)
 		return isoval(point, self.center, self.rSq)
 	end
 	inheritance.virtual(SphereImplicitShapeT, "isovalue")
+
+	terra SphereImplicitShapeT:minIsovalue() : real
+		return -self.rSq
+	end
+	inheritance.virtual(SphereImplicitShapeT, "minIsovalue")
 
 	terra SphereImplicitShapeT:bounds() : BBoxT
 		return [sphereBBox(BVec)](ad.val(self.center), ad.val(self.r))
@@ -273,6 +284,11 @@ local CapsuleImplicitShape = templatize(function(SpaceVec, ColorVec)
 		-- return isoval(point, self.bot, self.top, self.rSq, self.sqLen)
 	end
 	inheritance.virtual(CapsuleImplicitShapeT, "isovalue")
+
+	terra CapsuleImplicitShapeT:minIsovalue() : real
+		return -self.rSq
+	end
+	inheritance.virtual(CapsuleImplicitShapeT, "minIsovalue")
 
 	terra CapsuleImplicitShapeT:bounds() : BBoxT
 		var bbox1 = [sphereBBox(BVec)](ad.val(self.bot), ad.val(self.r))

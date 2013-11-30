@@ -57,12 +57,14 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	end
 
 	local function buildSampleFunction(smoothing)
+		local useTwoField = false
+		local secondFieldMult = 20.0
 		local function accumSharp(self, index, isovalue, color)
 			return quote
 				if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end
 			end
 		end
-		local function accumSmooth(self, index, isovalue, color, smoothParam)
+		local function accumSmoothOneField(self, index, isovalue, color, smoothParam)
 			return quote
 				var sp = [smoothParam]
 				var spv = ad.val(sp)
@@ -74,24 +76,48 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				end
 			end
 		end
+		local function accumSmoothTwoField(self, index, isovalue, color, smoothParam)
+			return quote
+				var sp = [smoothParam]
+				var spv = ad.val(sp)
+				var ivv = ad.val([isovalue])
+				if ivv < -spv*secondFieldMult*logSmoothAlphaThresh then
+					var alpha = 0.9*smoothAlpha([isovalue], sp)
+					[self].sampledFn:accumulateSample([index], [color], alpha)
+					alpha = 0.1*smoothAlpha([isovalue], sp*secondFieldMult)
+					[self].sampledFn:accumulateSample([index], [color], alpha)
+				end
+			end
+		end
+		local function accumSmooth(self, index, isovalue, color, smoothParam)
+			if useTwoField then
+				return accumSmoothTwoField(self, index, isovalue, color, smoothParam)
+			else
+				return accumSmoothOneField(self, index, isovalue, color, smoothParam)
+			end
+		end
 		local function expandBounds(bounds, smoothParam)
 			return quote [bounds]:expand(ad.math.sqrt(-smoothParam*logSmoothAlphaThresh)) end
 		end
 		local self = symbol(&ImplicitSamplerT, "self")
 		local pattern = symbol(&SamplingPattern, "pattern")
-		local smoothParam = symbol(double, "smoothParam")
+		local smoothParam = symbol(real, "smoothParam")
 		local params = {self, pattern}
+		local boundsExpansionFactor = `ad.val(smoothParam)
 		if smoothing then table.insert(params, smoothParam) end
+		if useTwoField then boundsExpansionFactor = `ad.val(smoothParam)*secondFieldMult end
 		return terra([params])
 			[self].sampledFn:setSamplingPattern([pattern])
 			for shapei=0,[self].shapes.size do
 				var shape = [self].shapes:get(shapei)
+				var miniv = shape:minIsovalue()
 				var bounds = shape:bounds()
-				[smoothing and expandBounds(bounds, smoothParam) or quote end]
+				[smoothing and expandBounds(bounds, boundsExpansionFactor) or quote end]
 				for sampi=0,[pattern].size do
 					var samplePoint = [pattern]:getPointer(sampi)
 					if bounds:contains(samplePoint) then
 						var isovalue, color = shape:isovalueAndColor(@samplePoint)
+						[smoothing and (quote isovalue = isovalue - miniv end) or quote end]
 						[smoothing and accumSmooth(self, sampi, isovalue, color, smoothParam) or
 									   accumSharp(self, sampi, isovalue, color)]
 					end
