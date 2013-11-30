@@ -65,8 +65,8 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name, doSmo
 	io.write("Rendering video...")
 	io.flush()
 	local moviefilename = string.format("%s/%s.mp4", directory, name)
-	local framebasename = directory .. "/movieframe_%06d.png"
-	local framewildcard = directory .. "/movieframe_*.png"
+	local framebasename = string.format("%s/%s", directory, name) .. "_%06d.png"
+	local framewildcard = string.format("%s/%s", directory, name) .. "_*.png"
 	local M = pmodule()
 	local SampledFunctionType = M.SampledFunctionType
 	local SamplerType = M.SamplerType
@@ -120,11 +120,13 @@ end
 
 ------------------
 
-local numsamps = 2000
+local numsamps = 1000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 2
 local doLocalErrorTempering = false
-local outputSmoothRender = false
+local hmcUsePrimalLP = false
+local alwaysDoSmoothing = false
+local outputSmoothRender = true
 local constraintStrength = 2000
 local expandFactor = 1
 
@@ -138,7 +140,7 @@ local targetImgName = "targets/knot_250.png"
 -- local targetImgName = "targets/symbol_200.png"
 
 local RandomWalkParams = {}
-local HMCParams = {usePrimalLP=true, pmrAlpha=0.0}
+local HMCParams = {usePrimalLP=hmcUsePrimalLP, pmrAlpha=0.0}
 local LARJParams = {intervals=0}
 
 local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
@@ -172,7 +174,12 @@ local scheduleFunction = macro(function(iter, currTrace)
 	end
 end)
 
-local pmodule = priorModule(inferenceTime)
+local pmodule = nil
+if alwaysDoSmoothing then
+	pmodule = priorModule(inferenceTime, true)
+else
+	pmodule = priorModule(inferenceTime)
+end
 
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
