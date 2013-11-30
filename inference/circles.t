@@ -3,6 +3,7 @@ terralib.require("prob")
 
 local m = terralib.require("mem")
 local templatize = terralib.require("templatize")
+local ad = terralib.require("ad")
 
 local Vector = terralib.require("vector")
 

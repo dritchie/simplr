@@ -31,10 +31,10 @@ end)
 local VinesRetType = templatize(function(real)
 	local Vec2 = Vec(real, 2)
 	local struct LineSeg { start: Vec2, stop: Vec2, width: real }
-	local struct VinesRetTypeT { segs: Vector(LineSeg), smoothParam: double }
+	local struct VinesRetTypeT { segs: Vector(LineSeg), smoothParam: real }
 	VinesRetTypeT.LineSeg = LineSeg
 	terra VinesRetTypeT:__construct() m.init(self.segs) end
-	terra VinesRetTypeT:__construct(segs: Vector(LineSeg), s: double)
+	terra VinesRetTypeT:__construct(segs: Vector(LineSeg), s: real)
 		self.segs = segs; self.smoothParam = s
 	end
 	terra VinesRetTypeT:__copy(other: &VinesRetTypeT)
@@ -53,7 +53,8 @@ local function vinesModule(inferenceTime, doSmoothing)
 		if doSmoothing == nil then doSmoothing = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
-		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
+		-- local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
+		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.None(), SfnOpts.AccumFns.Over())
 		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 		local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
 		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
@@ -80,8 +81,10 @@ local function vinesModule(inferenceTime, doSmoothing)
 
 		-- Constants
 		local maxBranches = 2
-		local initialBranchProb = 0.45
-		local finalBranchProb = 0.45
+		-- local initialBranchProb = 0.45
+		-- local finalBranchProb = 0.45
+		local initialBranchProb = 0.25
+		local finalBranchProb = 0.25
 		local branchProbMult = 1.0
 		-- local maxBranches = 4
 		-- local initialBranchProb = 0.75
@@ -139,7 +142,9 @@ local function vinesModule(inferenceTime, doSmoothing)
 
 			vinesRec(1, initialWidth, rootPoint, rootDir, &segs)
 
-			var smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
+			var smoothingAmount = 0.0005
+			-- var smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
+			-- var smoothingAmount = ngammaMS(0.002, 2)
 			return RetType.stackAlloc(segs, smoothingAmount)
 		end)
 
