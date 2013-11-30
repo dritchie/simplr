@@ -58,12 +58,7 @@ local function circlesModule(inferenceTime, doSmoothing)
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local CircleT = Circle(real)
-		local SampledFunctionType = nil
-		if doSmoothing then
-			SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
-		else
-			SampledFunctionType = SampledFunction(Vec2d, Color1)
-		end
+		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
 		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 		local CircleShape = shapes.SphereImplicitShape(Vec2, Color1)
 		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
@@ -93,30 +88,31 @@ local function circlesModule(inferenceTime, doSmoothing)
 				circs:getPointer(i).center(1) = nuniformWithFalloff(posMin, posMax)
 				circs:getPointer(i).radius = nuniformWithFalloff(radMin, radMax)
 			end
-			var smoothingAmount = 0.0
-			[(not doSmoothing) and quote end or
-			quote
-				-- smoothingAmount = 0.005
-				smoothingAmount = lerp(0.01, 0.001, inferenceTime)
-			end]
+			var smoothingAmount = lerp(0.01, 0.001, inferenceTime)
 			return RetType.stackAlloc(circs, smoothingAmount)
 		end)
 
-		local terra renderCircles(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
-			sampler:clear()
-			for i=0,retval.circles.size do
-				var c = retval.circles:getPointer(i)
-				var cShape = CircleShape.heapAlloc(c.center, c.radius)
-				var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
-				sampler:addShape(coloredShape)
+		local function genRenderFn(smooth)
+			return terra(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
+				sampler:clear()
+				for i=0,retval.circles.size do
+					var c = retval.circles:getPointer(i)
+					var cShape = CircleShape.heapAlloc(c.center, c.radius)
+					var coloredShape = ColoredShape.heapAlloc(cShape, Color1.stackAlloc(1.0))
+					sampler:addShape(coloredShape)
+				end
+				[(not smooth) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
 			end
-			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
 		end
+		local renderSmooth = genRenderFn(true)
+		local renderSharp = genRenderFn(false)
 
 		return
 		{
 			prior = circles, 
-			sample = renderCircles,
+			sampleSmooth = renderSmooth,
+			sampleSharp = renderSharp,
+			sample = (doSmoothing and renderSmooth or renderSharp),
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
 		}

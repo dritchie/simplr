@@ -53,12 +53,7 @@ local function grammarModule(inferenceTime, doSmoothing)
 		if doSmoothing == nil then doSmoothing = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
-		local SampledFunctionType = nil
-		if doSmoothing then
-			SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
-		else
-			SampledFunctionType = SampledFunction(Vec2d, Color1)
-		end
+		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
 		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 		local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
 		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
@@ -123,33 +118,34 @@ local function grammarModule(inferenceTime, doSmoothing)
 
 			grammarRec(rootPoint, rootDir, &segs)
 
-			var smoothingAmount : double
-			[(not doSmoothing) and quote end or
-			quote
-				-- smoothingAmount = 0.0005
-				smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
-			end]
+			var smoothingAmount = lerp(0.01, 0.0005, inferenceTime) 
 			return RetType.stackAlloc(segs, smoothingAmount)
 		end)
 
 		-- Rendering
-		local terra renderSegments(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
-			sampler:clear()
-			for i=0,retval.segs.size do
-				var seg = retval.segs:getPointer(i)
-				var capsule = Capsule.heapAlloc(seg.start, seg.stop, lineThickness)
-				var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
-				sampler:addShape(coloredCapsule)
+		local function genRenderFn(smooth)
+			return terra(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
+				sampler:clear()
+				for i=0,retval.segs.size do
+					var seg = retval.segs:getPointer(i)
+					var capsule = Capsule.heapAlloc(seg.start, seg.stop, lineThickness)
+					var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
+					sampler:addShape(coloredCapsule)
+				end
+				[(not smooth) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
 			end
-			[(not doSmoothing) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
 		end
+		local renderSmooth = genRenderFn(true)
+		local renderSharp = genRenderFn(false)
 
 		-- Module exports
 		return
 		{
 			prior = grammar,
 			doDepthBiasedSelection = true,
-			sample = renderSegments,
+			sampleSmooth = renderSmooth,
+			sampleSharp = renderSharp,
+			sample = (doSmoothing and renderSmooth or renderSharp),
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
 		}

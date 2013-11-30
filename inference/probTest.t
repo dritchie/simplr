@@ -61,7 +61,7 @@ end
 
 
 -- Render a video of the sequence of accepted states
-local function renderVideo(pmodule, targetData, valueSeq, directory, name)
+local function renderVideo(pmodule, targetData, valueSeq, directory, name, doSmooth)
 	io.write("Rendering video...")
 	io.flush()
 	local moviefilename = string.format("%s/%s.mp4", directory, name)
@@ -93,7 +93,11 @@ local function renderVideo(pmodule, targetData, valueSeq, directory, name)
 			var framenumber = 0
 			for i=0,[valueSeq].size,incr do
 				var val = [valueSeq]:getPointer(i)
-				M.sample(&val.value, &sampler, grid:getSamplePattern())
+				[doSmooth and 
+					(`M.sampleSmooth(&val.value, &sampler, grid:getSamplePattern()))
+				or
+					(`M.sampleSharp(&val.value, &sampler, grid:getSamplePattern()))
+				]
 				[SampledFunctionType.saveToImage(RGBImage)](&samples, &image, zeros, ones)
 				C.sprintf(framename, [basename], framenumber)
 				framenumber = framenumber + 1
@@ -116,10 +120,11 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 2000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 2
 local doLocalErrorTempering = false
+local outputSmoothRender = false
 local constraintStrength = 2000
 local expandFactor = 1
 
@@ -179,5 +184,5 @@ local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
 
 local basename = arg[1] or "movie"
-renderVideo(pmodule, targetData, values, "renders", basename)
+renderVideo(pmodule, targetData, values, "renders", basename, outputSmoothRender)
 
