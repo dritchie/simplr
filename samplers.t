@@ -59,41 +59,41 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	local function buildSampleFunction(smoothing)
 		local useTwoField = true
 		local secondFieldMult = 20.0
-		local function accumSharp(self, index, isovalue, color)
+		local function accumSharp(self, index, isovalue, color, alpha)
 			return quote
-				if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color]) end
+				if [isovalue] <= 0.0 then [self].sampledFn:accumulateSample([index], [color], [alpha]) end
 			end
 		end
-		local function accumSmoothOneField(self, index, isovalue, color, smoothParam)
+		local function accumSmoothOneField(self, index, isovalue, color, alpha, smoothParam)
 			return quote
 				var sp = [smoothParam]
 				var spv = ad.val(sp)
 				var ivv = ad.val([isovalue])
 				if ivv < -spv*logSmoothAlphaThresh then
-					-- var alpha = ad.math.exp(-[isovalue] / sp)
-					var alpha = smoothAlpha([isovalue], sp)
-					[self].sampledFn:accumulateSample([index], [color], alpha)
+					-- var alphaS = ad.math.exp(-[isovalue] / sp)
+					var alphaS = smoothAlpha([isovalue], sp)
+					[self].sampledFn:accumulateSample([index], [color], alphaS*alpha)
 				end
 			end
 		end
-		local function accumSmoothTwoField(self, index, isovalue, color, smoothParam)
+		local function accumSmoothTwoField(self, index, isovalue, color, alpha, smoothParam)
 			return quote
 				var sp = [smoothParam]
 				var spv = ad.val(sp)
 				var ivv = ad.val([isovalue])
 				if ivv < -spv*secondFieldMult*logSmoothAlphaThresh then
-					var alpha = 0.9*smoothAlpha([isovalue], sp)
-					[self].sampledFn:accumulateSample([index], [color], alpha)
-					alpha = 0.1*smoothAlpha([isovalue], sp*secondFieldMult)
-					[self].sampledFn:accumulateSample([index], [color], alpha)
+					var alphaS = 0.9*smoothAlpha([isovalue], sp)
+					[self].sampledFn:accumulateSample([index], [color], alpha*alphaS)
+					alphaS = 0.1*smoothAlpha([isovalue], sp*secondFieldMult)
+					[self].sampledFn:accumulateSample([index], [color], alpha*alphaS)
 				end
 			end
 		end
-		local function accumSmooth(self, index, isovalue, color, smoothParam)
+		local function accumSmooth(self, index, isovalue, color, alpha, smoothParam)
 			if useTwoField then
-				return accumSmoothTwoField(self, index, isovalue, color, smoothParam)
+				return accumSmoothTwoField(self, index, isovalue, color, alpha, smoothParam)
 			else
-				return accumSmoothOneField(self, index, isovalue, color, smoothParam)
+				return accumSmoothOneField(self, index, isovalue, color, alpha, smoothParam)
 			end
 		end
 		local function expandBounds(bounds, smoothParam)
@@ -116,10 +116,10 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 				for sampi=0,[pattern].size do
 					var samplePoint = [pattern]:getPointer(sampi)
 					if bounds:contains(samplePoint) then
-						var isovalue, color = shape:isovalueAndColor(@samplePoint)
+						var isovalue, color, alpha = shape:isovalueAndColor(@samplePoint)
 						[smoothing and (quote isovalue = isovalue - miniv end) or quote end]
-						[smoothing and accumSmooth(self, sampi, isovalue, color, smoothParam) or
-									   accumSharp(self, sampi, isovalue, color)]
+						[smoothing and accumSmooth(self, sampi, isovalue, color, alpha, smoothParam) or
+									   accumSharp(self, sampi, isovalue, color, alpha)]
 					end
 				end
 			end

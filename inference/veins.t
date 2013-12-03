@@ -32,7 +32,7 @@ end)
 
 local VeinsRetType = templatize(function(real)
 	local Vec2 = Vec(real, 2)
-	local struct LineSeg { start: Vec2, stop: Vec2, width: real }
+	local struct LineSeg { start: Vec2, stop: Vec2, width: real, alpha: real }
 	local struct VeinsRetTypeT { segs: Vector(LineSeg), smoothParam: real }
 	VeinsRetTypeT.LineSeg = LineSeg
 	terra VeinsRetTypeT:__construct() m.init(self.segs) end
@@ -96,6 +96,7 @@ local function veinsModule(inferenceTime, doSmoothing)
 		-- Constants
 		local widthMult = 0.01
 		local widthPower = 0.75
+		local alphaPower = 0.75
 		local length = 0.05
 		local numSegsMean = `40.0
 		local numChildrenMeanMult = `0.2
@@ -110,13 +111,14 @@ local function veinsModule(inferenceTime, doSmoothing)
 		veinsRec:define(terra(depth: uint, currPoint: Vec2, currDir: Vec2, segs: &Vector(LineSeg)) : {}
 			-- Generate a polyline
 			var lineWidth = widthMult/ad.math.pow(depth, widthPower)
+			var lineAlpha = 1.0/ad.math.pow(depth, alphaPower)
 			var numSegs	 = poisson(numSegsMean/depth)
 			var dirs = [Vector(Vec2)].stackAlloc(numSegs, Vec2.stackAlloc())
 			for i=0,numSegs do
 				currDir = rotate(currDir, ngaussian(segAngleMean, segAngleSD))
 				var newPoint = currPoint + length*currDir
 				dirs(i) = currDir
-				segs:push(LineSeg{currPoint, newPoint, lineWidth})
+				segs:push(LineSeg{currPoint, newPoint, lineWidth, lineAlpha})
 				currPoint = newPoint
 			end
 			-- Spawn some number of child polylines
@@ -157,7 +159,7 @@ local function veinsModule(inferenceTime, doSmoothing)
 				for i=0,retval.segs.size do
 					var seg = retval.segs:getPointer(i)
 					var capsule = Capsule.heapAlloc(seg.start, seg.stop, seg.width)
-					var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0))
+					var coloredCapsule = ColoredShape.heapAlloc(capsule, Color1.stackAlloc(1.0), seg.alpha)
 					sampler:addShape(coloredCapsule)
 				end
 				[(not smooth) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]

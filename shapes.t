@@ -33,7 +33,7 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 
 	inheritance.purevirtual(ImplicitShapeT, "minIsovalue", {}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
-	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec})
+	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec, real})
 	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBoxT})
 
 	return ImplicitShapeT
@@ -49,14 +49,19 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	local struct ConstantColorImplicitShapeT
 	{
 		innerShape: &ImplicitShapeT,
-		color: ColorVec
+		color: ColorVec,
+		alpha: real
 	}
 	inheritance.dynamicExtend(ImplicitShapeT, ConstantColorImplicitShapeT)
 
 	-- Takes ownserhip of 'shape'
-	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: ColorVec)
+	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: ColorVec, alpha: real) : {}
 		self.innerShape = shape
 		self.color = color
+		self.alpha = alpha
+	end
+	terra ConstantColorImplicitShapeT:__construct(shape: &ImplicitShapeT, color: ColorVec) : {}
+		self:__construct(shape, color, 1.0)
 	end
 
 	terra ConstantColorImplicitShapeT:__destruct() : {}
@@ -74,8 +79,8 @@ local ConstantColorImplicitShape = templatize(function(SpaceVec, ColorVec)
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalue")
 
-	terra ConstantColorImplicitShapeT:isovalueAndColor(point: SpaceVec) : {real, ColorVec}
-		return self.innerShape:isovalue(point), self.color
+	terra ConstantColorImplicitShapeT:isovalueAndColor(point: SpaceVec) : {real, ColorVec, real}
+		return self.innerShape:isovalue(point), self.color, self.alpha
 	end
 	inheritance.virtual(ConstantColorImplicitShapeT, "isovalueAndColor")
 
