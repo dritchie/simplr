@@ -24,6 +24,7 @@ local circlesModule = terralib.require("circles")
 local polylineModule = terralib.require("polyline")
 local grammarModule = terralib.require("grammar")
 local vinesModule = terralib.require("vines")
+local veinsModule = terralib.require("veins")
 
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
@@ -55,6 +56,13 @@ local function doMCMC(program, kernel, numsamps, verbose)
 	if verbose == nil then verbose = true end
 	local terra fn()
 		return [mcmc(program, kernel, {numsamps=numsamps, verbose=verbose})]
+	end
+	return m.gc(fn())
+end
+
+local function doForwardSample(program, numsamps)
+	local terra fn()
+		return [forwardSample(program, numsamps)]
 	end
 	return m.gc(fn())
 end
@@ -120,18 +128,21 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 10000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 2
 local doLocalErrorTempering = false
 local hmcUsePrimalLP = false
 local alwaysDoSmoothing = false
-local outputSmoothRender = true
+local outputSmoothRender = false
 local constraintStrength = 2000
 local expandFactor = 1
 
-local priorModule = vinesModule
-local targetImgName = "targets/knot_250.png"
+
+local priorModule = veinsModule
+local targetImgName = "targets/bird_250.png"
+-- local priorModule = vinesModule
+-- local targetImgName = "targets/knot_250.png"
 -- local priorModule = grammarModule
 -- local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
@@ -189,6 +200,7 @@ local program = bayesProgram(pmodule, lmodule)
 
 local kernel = Schedule(kernel, scheduleFunction)
 local values = doMCMC(program, kernel, numsamps)
+-- local values = doForwardSample(program, numsamps)
 
 local basename = arg[1] or "movie"
 renderVideo(pmodule, targetData, values, "renders", basename, outputSmoothRender)

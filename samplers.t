@@ -57,7 +57,7 @@ local ImplicitSampler = templatize(function(SampledFunctionT, Shape)
 	end
 
 	local function buildSampleFunction(smoothing)
-		local useTwoField = false
+		local useTwoField = true
 		local secondFieldMult = 20.0
 		local function accumSharp(self, index, isovalue, color)
 			return quote
