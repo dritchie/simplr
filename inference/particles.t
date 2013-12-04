@@ -20,9 +20,6 @@ local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
 --------------------------------
 
-
--- Probabilistic code for multiply-recursive structures.
-
 local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
 end)
@@ -161,27 +158,27 @@ local function particlesModule(inferenceTime, doSmoothing)
 			var attractors = [Vector(Attractor)].stackAlloc()
 
 			-- Spawn particles
-			var numSpawnPoints = poisson(numSpawnPointsConcentration)
-			-- var numSpawnPoints = 1
+			-- var numSpawnPoints = poisson(numSpawnPointsConcentration)
+			var numSpawnPoints = 1
 			for i=0,numSpawnPoints do
 				var pos = Vec2.stackAlloc(ngaussian(spawnPointPosMean, spawnPointPosSD), ngaussian(spawnPointPosMean, spawnPointPosSD))
 				var domDir = nuniformClamped(0.0, [2*math.pi])
 				var domMag = ngammaMS(dominantVelMagMean, dominantVelMagShape)
 				var domColor = Color3.stackAlloc(nuniformClamped(0.0, 1.0), nuniformClamped(0.0, 1.0), nuniformClamped(0.0, 1.0))
 
-				-- var vel = rotate(Vec2.stackAlloc(1.0, 0.0), domDir) * domMag
-				-- particles:push(Particle.stackAlloc(pos, vel, domColor))
+				var vel = rotate(Vec2.stackAlloc(1.0, 0.0), domDir) * domMag
+				particles:push(Particle.stackAlloc(pos, vel, domColor))
 
-				var numParticles = 1
-				-- var numParticles = poisson(numParticlesConcentration)
-				for p=0,numParticles do
-					var velDir = rotate(Vec2.stackAlloc(1.0, 0.0), ngaussian(domDir, velDirSD))
-					var vel = ngammaMS(domMag, velMagShape) * velDir
-					var color = Color3.stackAlloc(nbetaMSClamped(domColor(0), colorPerturbTightness),
-												  nbetaMSClamped(domColor(1), colorPerturbTightness),
-												  nbetaMSClamped(domColor(2), colorPerturbTightness))
-					particles:push(Particle.stackAlloc(pos, vel, color))
-				end
+				-- var numParticles = 1
+				-- -- var numParticles = poisson(numParticlesConcentration)
+				-- for p=0,numParticles do
+				-- 	var velDir = rotate(Vec2.stackAlloc(1.0, 0.0), ngaussian(domDir, velDirSD))
+				-- 	var vel = ngammaMS(domMag, velMagShape) * velDir
+				-- 	var color = Color3.stackAlloc(nbetaMSClamped(domColor(0), colorPerturbTightness),
+				-- 								  nbetaMSClamped(domColor(1), colorPerturbTightness),
+				-- 								  nbetaMSClamped(domColor(2), colorPerturbTightness))
+				-- 	particles:push(Particle.stackAlloc(pos, vel, color))
+				-- end
 			end
 
 			-- Spawn attractors

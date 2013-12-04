@@ -26,6 +26,7 @@ local grammarModule = terralib.require("grammar")
 local vinesModule = terralib.require("vines")
 local veinsModule = terralib.require("veins")
 local particlesModule = terralib.require("particles")
+local colorDotModule = terralib.require("colorDot")
 
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
@@ -140,8 +141,10 @@ local constraintStrength = 2000
 local expandFactor = 1
 
 
-local priorModule = particlesModule
-local targetImgName = "targets/flowers_250.png"
+local priorModule = colorDotModule
+local targetImgName = "targets/red_250.png"
+-- local priorModule = particlesModule
+-- local targetImgName = "targets/flowers_250.png"
 -- local priorModule = veinsModule
 -- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule

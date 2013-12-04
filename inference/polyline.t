@@ -21,9 +21,6 @@ local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
 --------------------------------
 
-
--- Probabilistic code for random polylines.
-
 local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
 end)
