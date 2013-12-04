@@ -18,8 +18,6 @@ local shapes = terralib.require("shapes")
 
 local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
-local C = terralib.includec("stdio.h")
-
 --------------------------------
 
 

@@ -25,6 +25,7 @@ local polylineModule = terralib.require("polyline")
 local grammarModule = terralib.require("grammar")
 local vinesModule = terralib.require("vines")
 local veinsModule = terralib.require("veins")
+local particlesModule = terralib.require("particles")
 
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
@@ -128,7 +129,7 @@ end
 
 ------------------
 
-local numsamps = 10000
+local numsamps = 1000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 2
 local doLocalErrorTempering = false
@@ -139,8 +140,10 @@ local constraintStrength = 2000
 local expandFactor = 1
 
 
-local priorModule = veinsModule
-local targetImgName = "targets/bird_250.png"
+local priorModule = particlesModule
+local targetImgName = "targets/flowers_250.png"
+-- local priorModule = veinsModule
+-- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule
 -- local targetImgName = "targets/knot_250.png"
 -- local priorModule = grammarModule
@@ -193,12 +196,13 @@ else
 end
 
 constraintStrength = expandFactor*expandFactor*constraintStrength
-local targetData = loadTargetImage(SampledFunction2d1d, targetImgName, expandFactor)
+local targetData = loadTargetImage(pmodule().SampledFunctionType, targetImgName, expandFactor)
 local lmodule = mseLikelihoodModule(pmodule, targetData, constraintStrength,
 	inferenceTime, zeroTargetLLSum, doLocalErrorTempering)
 local program = bayesProgram(pmodule, lmodule)
 
 local kernel = Schedule(kernel, scheduleFunction)
+
 local values = doMCMC(program, kernel, numsamps)
 -- local values = doForwardSample(program, numsamps)
 
