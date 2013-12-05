@@ -52,7 +52,8 @@ end)
 
 local function circlesModule(inferenceTime, doSmoothing)
 	return function()
-		if doSmoothing == nil then doSmoothing = (real == ad.num) end
+		local doSmooth = doSmoothing
+		if doSmooth == nil then doSmooth = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local CircleT = Circle(real)
@@ -110,7 +111,7 @@ local function circlesModule(inferenceTime, doSmoothing)
 			prior = circles, 
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
-			sample = (doSmoothing and renderSmooth or renderSharp),
+			sample = (doSmooth and renderSmooth or renderSharp),
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
 		}

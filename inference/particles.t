@@ -4,6 +4,7 @@ terralib.require("prob")
 local m = terralib.require("mem")
 local templatize = terralib.require("templatize")
 local ad = terralib.require("ad")
+local util = terralib.require("util")
 
 local Vector = terralib.require("vector")
 
@@ -17,6 +18,8 @@ local SampledFunction = terralib.require("sampledFunction")
 local shapes = terralib.require("shapes")
 
 local ImplicitSampler = terralib.require("samplers").ImplicitSampler
+
+local C = terralib.includec("stdio.h")
 
 --------------------------------
 
@@ -48,7 +51,8 @@ end)
 
 local function particlesModule(inferenceTime, doSmoothing)
 	return function()
-		if doSmoothing == nil then doSmoothing = (real == ad.num) end
+		local doSmooth = doSmoothing
+		if doSmooth == nil then doSmooth = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color3 = Color(real, 3)
 		local SampledFunctionType = SampledFunction(Vec2d, Color3, SfnOpts.ClampFns.None(), SfnOpts.AccumFns.Over())
@@ -124,8 +128,6 @@ local function particlesModule(inferenceTime, doSmoothing)
 		local numAttractorsConcentration = 10
 		local attractorPosMean = 0.5
 		local attractorPosSD = 0.25
-		-- local attractorMagMean = 0.001
-		-- local attractorMagShape = `2.0
 		local attractorMagMean = `0.0
 		local attractorMagSD = 0.002
 
@@ -181,15 +183,14 @@ local function particlesModule(inferenceTime, doSmoothing)
 				-- end
 			end
 
-			-- Spawn attractors
-			var numAttractors = poisson(numAttractorsConcentration)
-			-- var numAttractors = 1
-			for i=0,numAttractors do
-				var pos = Vec2.stackAlloc(ngaussian(attractorPosMean, attractorPosSD), ngaussian(attractorPosMean, attractorPosSD))
-				-- var mag = ngammaMS(attractorMagMean, attractorMagShape)
-				var mag = ngaussian(attractorMagMean, attractorMagSD)
-				attractors:push(Attractor{pos, mag})
-			end
+			-- -- Spawn attractors
+			-- var numAttractors = poisson(numAttractorsConcentration)
+			-- -- var numAttractors = 1
+			-- for i=0,numAttractors do
+			-- 	var pos = Vec2.stackAlloc(ngaussian(attractorPosMean, attractorPosSD), ngaussian(attractorPosMean, attractorPosSD))
+			-- 	var mag = ngaussian(attractorMagMean, attractorMagSD)
+			-- 	attractors:push(Attractor{pos, mag})
+			-- end
 
 			-- Simulate, recording streamlines as we go
 			for t=0,numSteps do
@@ -218,7 +219,8 @@ local function particlesModule(inferenceTime, doSmoothing)
 			m.destruct(particles)
 			m.destruct(attractors)
 
-			var smoothingAmount = 0.0005
+			var smoothingAmount = 0.00002
+			-- var smoothingAmount = 0.0005
 			-- var smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
 			-- var smoothingAmount = ngammaMS(0.002, 2)
 			return RetType.stackAlloc(segs, smoothingAmount)
@@ -234,7 +236,12 @@ local function particlesModule(inferenceTime, doSmoothing)
 					var coloredCapsule = ColoredShape.heapAlloc(capsule, seg.color)
 					sampler:addShape(coloredCapsule)
 				end
-				[(not smooth) and (`sampler:sampleSharp(pattern)) or (`sampler:sampleSmooth(pattern, retval.smoothParam))]
+				[util.optionally(smooth, function() return quote
+					sampler:sampleSmooth(pattern, retval.smoothParam)
+				end end)]
+				[util.optionally(not smooth, function() return quote
+					sampler:sampleSharp(pattern)
+				end end)]
 			end
 		end
 		local renderSmooth = genRenderFn(true)
@@ -247,7 +254,7 @@ local function particlesModule(inferenceTime, doSmoothing)
 			doDepthBiasedSelection = true,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
-			sample = (doSmoothing and renderSmooth or renderSharp),
+			sample = (doSmooth and renderSmooth or renderSharp),
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
 		}

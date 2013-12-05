@@ -22,7 +22,8 @@ local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
 local function colorDotModule(inferenceTime, doSmoothing)
 	return function()
-		if doSmoothing == nil then doSmoothing = (real == ad.num) end
+		local doSmooth = doSmoothing
+		if doSmooth == nil then doSmooth = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color3 = Color(real, 3)
 		local SampledFunctionType = SampledFunction(Vec2d, Color3, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())

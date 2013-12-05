@@ -141,10 +141,10 @@ local constraintStrength = 2000
 local expandFactor = 1
 
 
-local priorModule = colorDotModule
+-- local priorModule = colorDotModule
+-- local targetImgName = "targets/red_250.png"
+local priorModule = particlesModule
 local targetImgName = "targets/red_250.png"
--- local priorModule = particlesModule
--- local targetImgName = "targets/flowers_250.png"
 -- local priorModule = veinsModule
 -- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule

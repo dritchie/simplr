@@ -46,7 +46,8 @@ end)
 
 local function polylineModule(inferenceTime, doSmoothing)
 	return function()
-		if doSmoothing == nil then doSmoothing = (real == ad.num) end
+		local doSmooth = doSmoothing
+		if doSmooth == nil then doSmooth = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
 		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
@@ -131,7 +132,7 @@ local function polylineModule(inferenceTime, doSmoothing)
 			prior = polyline,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
-			sample = (doSmoothing and renderSmooth or renderSharp),
+			sample = (doSmooth and renderSmooth or renderSharp),
 			SampledFunctionType = SampledFunctionType,
 			SamplerType = Sampler
 		}
