@@ -165,7 +165,8 @@ local function particlesModule(inferenceTime, doSmoothing)
 			for i=0,numSpawnPoints do
 				var pos = Vec2.stackAlloc(ngaussian(spawnPointPosMean, spawnPointPosSD), ngaussian(spawnPointPosMean, spawnPointPosSD))
 				var domDir = nuniformClamped(0.0, [2*math.pi])
-				var domMag = ngammaMS(dominantVelMagMean, dominantVelMagShape)
+				var domMag = ngammaMS(dominantVelMagMean, dominantVelMagShape)	-- This is an immensely sensitive variable...
+				-- var domMag = dominantVelMagMean
 				var domColor = Color3.stackAlloc(nuniformClamped(0.0, 1.0), nuniformClamped(0.0, 1.0), nuniformClamped(0.0, 1.0))
 
 				var vel = rotate(Vec2.stackAlloc(1.0, 0.0), domDir) * domMag
@@ -183,14 +184,14 @@ local function particlesModule(inferenceTime, doSmoothing)
 				-- end
 			end
 
-			-- -- Spawn attractors
-			-- var numAttractors = poisson(numAttractorsConcentration)
-			-- -- var numAttractors = 1
-			-- for i=0,numAttractors do
-			-- 	var pos = Vec2.stackAlloc(ngaussian(attractorPosMean, attractorPosSD), ngaussian(attractorPosMean, attractorPosSD))
-			-- 	var mag = ngaussian(attractorMagMean, attractorMagSD)
-			-- 	attractors:push(Attractor{pos, mag})
-			-- end
+			-- Spawn attractors
+			var numAttractors = poisson(numAttractorsConcentration)
+			-- var numAttractors = 1
+			for i=0,numAttractors do
+				var pos = Vec2.stackAlloc(ngaussian(attractorPosMean, attractorPosSD), ngaussian(attractorPosMean, attractorPosSD))
+				var mag = ngaussian(attractorMagMean, attractorMagSD)
+				attractors:push(Attractor{pos, mag})
+			end
 
 			-- Simulate, recording streamlines as we go
 			for t=0,numSteps do
@@ -203,7 +204,6 @@ local function particlesModule(inferenceTime, doSmoothing)
 						var diffVec = apos - p.pos
 						var diffVecNorm = diffVec:norm()
 						diffVec = diffVec / diffVecNorm
-						-- newAccel = newAccel + (amag/(diffVecNorm*diffVecNorm) * diffVec)
 						newAccel = newAccel + (amag * diffVec)
 					end
 					var oldPos = p.pos
