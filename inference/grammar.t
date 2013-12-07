@@ -116,7 +116,8 @@ local function grammarModule(inferenceTime, doSmoothing)
 
 			grammarRec(rootPoint, rootDir, &segs)
 
-			var smoothingAmount = lerp(0.01, 0.0005, inferenceTime) 
+			-- var smoothingAmount = lerp(0.01, 0.0005, inferenceTime)
+			var smoothingAmount = 0.0005 
 			return RetType.stackAlloc(segs, smoothingAmount)
 		end)
 

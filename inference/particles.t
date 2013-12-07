@@ -251,7 +251,7 @@ local function particlesModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = particles,
-			doDepthBiasedSelection = true,
+			doDepthBiasedSelection = false,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),

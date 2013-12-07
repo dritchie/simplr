@@ -132,7 +132,7 @@ end
 
 local numsamps = 1000
 local doGlobalAnnealing = false
-local initialGlobalTemp = 2
+local initialGlobalTemp = 10
 local doLocalErrorTempering = false
 local hmcUsePrimalLP = false
 local alwaysDoSmoothing = false
@@ -143,14 +143,14 @@ local expandFactor = 1
 
 -- local priorModule = colorDotModule
 -- local targetImgName = "targets/red_250.png"
-local priorModule = particlesModule
-local targetImgName = "targets/red_250.png"
+-- local priorModule = particlesModule
+-- local targetImgName = "targets/red_250.png"
 -- local priorModule = veinsModule
 -- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule
 -- local targetImgName = "targets/knot_250.png"
--- local priorModule = grammarModule
--- local targetImgName = "targets/helix_250.png"
+local priorModule = grammarModule
+local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
 -- local targetImgName = "targets/squiggle_200.png"
 -- local priorModule = circlesModule
