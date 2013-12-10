@@ -149,7 +149,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		end
 		initNearTree()
 		local terra knnCNearTree(queryPoint: Vec2)
-			var queryPointD  = Vec2d(queryPoint)
+			var queryPointD  = ad.val(queryPoint)
 			var queryPointRawData = [&double](queryPointD.entries)
 			var radius = [math.huge] 	-- ???
 			var outCoords : CNearTree.CVectorHandle
@@ -178,7 +178,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 				var loc = ns(i).loc
 				var dist = queryPoint:distSq(loc)
 				if dist < minDist then
-					minDist = dist
+					minDist = ad.val(dist)
 					minIndex = i
 				end
 			end
@@ -262,7 +262,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 				-- Repopulate the near tree
 				CNearTree.CNearTreeClear(nearTree)
 				for i=0,retval.points.size do
-					var p = Vec2d(retval.points(i).loc)
+					var p = ad.val(retval.points(i).loc)
 					var pdata = [&double](p.entries)
 					CNearTree.CNearTreeInsert(nearTree, pdata, retval.points:getPointer(i))
 				end
