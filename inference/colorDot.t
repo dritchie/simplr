@@ -72,6 +72,9 @@ local function colorDotModule(inferenceTime, doSmoothing)
 end
 
 
-return colorDotModule
+return
+{
+	codeModule = colorDotModule
+}
 
 

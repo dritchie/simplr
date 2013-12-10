@@ -284,7 +284,6 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = stainedGlass,
-			doDepthBiasedSelection = false,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),
@@ -295,7 +294,11 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 end
 
 
-return stainedGlassModule
+return
+{
+	codeModule = stainedGlassModule,
+	jumpFreq = 0.25
+}
 
 
 

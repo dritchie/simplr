@@ -165,7 +165,6 @@ local function vinesModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = vines,
-			doDepthBiasedSelection = true,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),
@@ -176,7 +175,11 @@ local function vinesModule(inferenceTime, doSmoothing)
 end
 
 
-return vinesModule
+return
+{
+	codeModule = vinesModule,
+	doDepthBiasedSelection = true
+}
 
 
 

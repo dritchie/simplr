@@ -140,7 +140,10 @@ local function polylineModule(inferenceTime, doSmoothing)
 end
 
 
-return polylineModule
+return
+{
+	codeModule = polylineModule
+}
 
 
 

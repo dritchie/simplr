@@ -262,7 +262,11 @@ local function particlesModule(inferenceTime, doSmoothing)
 end
 
 
-return particlesModule
+return
+{
+	codeModule = particlesModule,
+	jumpFreq = 0.25
+}
 
 
 

@@ -119,6 +119,9 @@ local function circlesModule(inferenceTime, doSmoothing)
 end
 
 
-return circlesModule
+return
+{
+	codeModule = circlesModule
+}
 
 

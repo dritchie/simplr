@@ -167,7 +167,6 @@ local function veinsModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = veins,
-			doDepthBiasedSelection = true,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),
@@ -178,7 +177,11 @@ local function veinsModule(inferenceTime, doSmoothing)
 end
 
 
-return veinsModule
+return
+{
+	codeModule = veinsModule,
+	doDepthBiasedSelection = true
+}
 
 
 

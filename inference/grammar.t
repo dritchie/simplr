@@ -141,7 +141,6 @@ local function grammarModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = grammar,
-			doDepthBiasedSelection = true,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),
@@ -152,7 +151,11 @@ local function grammarModule(inferenceTime, doSmoothing)
 end
 
 
-return grammarModule
+return
+{
+	codeModule = grammarModule,
+	doDepthBiasedSelection = true
+}
 
 
 

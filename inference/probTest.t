@@ -27,10 +27,10 @@ local vinesModule = terralib.require("vines")
 local veinsModule = terralib.require("veins")
 local particlesModule = terralib.require("particles")
 local colorDotModule = terralib.require("colorDot")
+local stainedGlassModule = terralib.require("stainedGlass")
 
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
-
 
 local C = terralib.includecstring [[
 #include <stdio.h>
@@ -130,7 +130,7 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 2000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
@@ -141,6 +141,8 @@ local constraintStrength = 2000
 local expandFactor = 1
 
 
+local priorModule = stainedGlassModule
+local targetImgName = "targets/tiger_250.png"
 -- local priorModule = colorDotModule
 -- local targetImgName = "targets/red_250.png"
 -- local priorModule = particlesModule
@@ -149,22 +151,20 @@ local expandFactor = 1
 -- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule
 -- local targetImgName = "targets/knot_250.png"
-local priorModule = grammarModule
-local targetImgName = "targets/helix_250.png"
+-- local priorModule = grammarModule
+-- local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
 -- local targetImgName = "targets/squiggle_200.png"
 -- local priorModule = circlesModule
 -- local targetImgName = "targets/symbol_200.png"
 
-local RandomWalkParams = {}
 local HMCParams = {usePrimalLP=hmcUsePrimalLP, pmrAlpha=0.0}
 local LARJParams = {intervals=0}
-
-local doDepthBiasedSelection = priorModule(global(double))().doDepthBiasedSelection
-LARJParams.doDepthBiasedSelection = doDepthBiasedSelection
+LARJParams.doDepthBiasedSelection = priorModule.doDepthBiasedSelection
+LARJParams.jumpFreq = priorModule.jumpFreq or 0.0
 
 local kernel = LARJ(HMC(HMCParams))(LARJParams)
--- local kernel = LARJ(RandomWalk(util.joinTables(RandomWalkParams, {structs=false})))(LARJParams)
+-- local kernel = LARJ(RandomWalk({structs=false}))(LARJParams)
 
 -------------------
 
@@ -193,9 +193,9 @@ end)
 
 local pmodule = nil
 if alwaysDoSmoothing then
-	pmodule = priorModule(inferenceTime, true)
+	pmodule = priorModule.codeModule(inferenceTime, true)
 else
-	pmodule = priorModule(inferenceTime)
+	pmodule = priorModule.codeModule(inferenceTime)
 end
 
 constraintStrength = expandFactor*expandFactor*constraintStrength
