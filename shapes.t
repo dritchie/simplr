@@ -31,7 +31,11 @@ local ImplicitShape = templatize(function(SpaceVec, ColorVec)
 	terra ImplicitShapeT:__destruct() : {} end
 	inheritance.virtual(ImplicitShapeT, "__destruct")
 
-	inheritance.purevirtual(ImplicitShapeT, "minIsovalue", {}->{real})
+	terra ImplicitShapeT:minIsovalue() : real
+		return 0.0
+	end
+	inheritance.virtual(ImplicitShapeT, "minIsovalue")
+
 	inheritance.purevirtual(ImplicitShapeT, "isovalue", {SpaceVec}->{real})
 	inheritance.purevirtual(ImplicitShapeT, "isovalueAndColor", {SpaceVec}->{real, ColorVec, real})
 	inheritance.purevirtual(ImplicitShapeT, "bounds", {}->{BBoxT})
