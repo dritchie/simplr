@@ -130,7 +130,7 @@ end
 
 ------------------
 
-local numsamps = 2000
+local numsamps = 1000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false

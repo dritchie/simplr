@@ -87,7 +87,8 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		local numNeighbors = 4
 
 		-- Priors
-		local numPointsConcentration = 500
+		-- local numPointsConcentration = 500
+		local numPointsConcentration = 50
 		local pointPosMean = 0.5
 		local pointPosSD = 0.25
 
@@ -108,6 +109,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			end
 
 			var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			-- var smoothingAmount = 1.0
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
 
