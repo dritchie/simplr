@@ -24,6 +24,8 @@ local ImplicitSampler = terralib.require("samplers").ImplicitSampler
 
 local C = terralib.includec("stdio.h")
 
+local CNearTree = terralib.require("CNearTree")
+
 --------------------------------
 
 local lerp = macro(function(lo, hi, t)
@@ -109,22 +111,23 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
 
+		-- Brute-force nearest-neighbor lookup
 		local terra knnBruteForce(queryPoint: Vec2, points: &Vector(Point))
 			if not (points.size >= numNeighbors) then
 				util.fatalError("numNeighbors must be <= the number of points")
 			end
-			var ns = [Vector(int)].stackAlloc(numNeighbors, -1)
+			var ns = [Vector(&Point)].stackAlloc(numNeighbors, nil)
 			var nds = [Vector(real)].stackAlloc(numNeighbors, [math.huge])
 			for i=0,points.size do
 				var p = points(i)
 				var dist = queryPoint:distSq(p.loc)
 				for j=0,numNeighbors do
-					if ns(j) == -1 then
-						ns(j) = i
+					if ns(j) == nil then
+						ns(j) = points:getPointer(i)
 						nds(j) = dist
 						break
 					elseif nds(j) > dist then
-						ns:insert(j, i)
+						ns:insert(j, points:getPointer(i))
 						nds:insert(j, dist)
 						ns:resize(numNeighbors)
 						nds:resize(numNeighbors)
@@ -136,6 +139,60 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			return ns
 		end
 
+		-- Accelerated nearest-neighbor lookup
+		local ffi = require("ffi")
+		local nearTree = global(CNearTree.CNearTreeHandle)
+		ffi.gc(nearTree:getpointer(), function(nt) CNearTree.CNearTreeFree(nt) end)
+		local CNEARTREE_TYPE_DOUBLE = 16
+		local terra initNearTree()
+			CNearTree.CNearTreeCreate(&nearTree, 2, CNEARTREE_TYPE_DOUBLE)
+		end
+		initNearTree()
+		local terra knnCNearTree(queryPoint: Vec2)
+			var queryPointD  = Vec2d(queryPoint)
+			var queryPointRawData = [&double](queryPointD.entries)
+			var radius = [math.huge] 	-- ???
+			var outCoords : CNearTree.CVectorHandle
+			var outPointers : CNearTree.CVectorHandle
+			CNearTree.CVectorCreate(&outCoords, sizeof([&opaque]), 0)
+			CNearTree.CVectorCreate(&outPointers, sizeof([&opaque]), 0)
+			var retcode = CNearTree.CNearTreeFindKNearest(nearTree, numNeighbors, radius, outCoords, outPointers, queryPointRawData, 0)
+			-- if retcode ~= 0 then
+			-- 	util.fatalError("NearTree failed to find nearest neighbors\n")
+			-- end
+			-- CNearTree.CVectorFree(&outCoords)
+			-- var outsize: uint64
+			-- CNearTree.CVectorGetSize(outPointers, &outsize)
+			-- if outsize ~= numNeighbors then
+			-- 	util.fatalError("NearTree failed to find as many neighbors as requested\n")
+			-- end
+
+			var ns = [Vector(&Point)].stackAlloc(numNeighbors, nil)
+			var minDist = [math.huge]
+			var minIndex = -1
+			for i=0,numNeighbors do
+				var elem : &opaque
+				CNearTree.CVectorGetElement(outPointers, &elem, i)
+				var point = @[&&Point](elem)
+				ns(i) = point
+				var loc = ns(i).loc
+				var dist = queryPoint:distSq(loc)
+				if dist < minDist then
+					minDist = dist
+					minIndex = i
+				end
+			end
+			CNearTree.CVectorFree(&outPointers)
+
+			-- Ensure the closest one is first (other ordering doesn't really matter)
+			var tmp = ns(0)
+			ns(0) = ns(minIndex)
+			ns(minIndex) = tmp
+
+			return ns
+		end
+
+		-- Stained glass rendering abstracted as an ImplicitShape
 		local struct StainedGlassShape
 		{
 			points: Vector(Point),
@@ -160,11 +217,14 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		inheritance.virtual(StainedGlassShape, "isovalue")
 
 		terra StainedGlassShape:isovalueAndColor(point: Vec2) : {real, Color3, real}
-			var neighbors = knnBruteForce(point, &self.points)
+
+			-- var neighbors = knnBruteForce(point, &self.points)
+			var neighbors = knnCNearTree(point)
+
 			-- Compute unnormalized weights via inverse distance
 			var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
 			for i=0,weights.size do
-				weights(i) = 1.0 / point:dist(self.points(neighbors(i)).loc)
+				weights(i) = 1.0 / point:dist(neighbors(i).loc)
 			end
 			var totalWeight = weights(0)
 			-- Interpolate toward zero for all weights other than the largest (using smoothing param)
@@ -176,7 +236,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			var color = Color3.stackAlloc(0.0, 0.0, 0.0)
 			for i=0,weights.size do
 				weights(i) = weights(i) / totalWeight
-				color = color + (weights(i) * self.points(neighbors(i)).color)
+				color = color + (weights(i) * neighbors(i).color)
 			end
 
 			m.destruct(neighbors)
@@ -198,6 +258,16 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		local function genRenderFn(smooth)
 			return terra(retval: &RetType, sampler: &Sampler, pattern: &Vector(Vec2d))
 				sampler:clear()
+
+				-- Repopulate the near tree
+				CNearTree.CNearTreeClear(nearTree)
+				for i=0,retval.points.size do
+					var p = Vec2d(retval.points(i).loc)
+					var pdata = [&double](p.entries)
+					CNearTree.CNearTreeInsert(nearTree, pdata, retval.points:getPointer(i))
+				end
+				CNearTree.CNearTreeCompleteDelayedInsert(nearTree)
+
 				var shape = [smooth and
 					(`StainedGlassShape.heapAlloc(&retval.points, retval.smoothParam))
 				or
