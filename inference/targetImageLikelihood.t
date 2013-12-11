@@ -49,7 +49,7 @@ local function loadTargetImage(SampledFunctionType, filename, expandFactor)
 end
 
 -- Calculate mean squared error between two sample sets
-local mse = macro(function(srcPointer, tgtPointer, zeroWeight)
+local mse = macro(function(srcPointer, tgtPointer)
 	local SampledFunctionT1 = srcPointer:gettype().type
 	local SampledFunctionT2 = tgtPointer:gettype().type
 	local accumType = SampledFunctionT1.ColorVec.RealType
@@ -57,15 +57,9 @@ local mse = macro(function(srcPointer, tgtPointer, zeroWeight)
 		return macro(function(color1, color2)
 			return quote
 				var err = [color1]:distSq(@[color2])
-				[zeroWeight and
-				quote
-					var w = 1.0
-					if @[color2] == 0.0 then w = zeroWeight end
-					[accum] = [accum] + w*err
-				end or
-				quote
+				-- if not (@[color2] == 0.0) then 
 					[accum] = [accum] + err
-				end]
+				-- end
 			end
 		end) 
 	end
@@ -144,11 +138,9 @@ local function mseLikelihoodModule(priorModuleWithSampling, targetData, strength
 					var nonZeroLL = -strength*nonZeroErr
 					zeroTargetLLSum = ad.val(zeroLL)
 					l = nonZeroLL + inferenceTime*zeroLL
-					l = nonZeroLL
 				end
 			or
 				quote
-					-- l = -strength * mse(&samples, &target, 0.0)
 					l = -strength * mse(&samples, &target)
 				end
 			]
