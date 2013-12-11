@@ -130,16 +130,17 @@ end
 
 ------------------
 
-local numsamps = 1000
+local numsamps = 2000
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
-local hmcUsePrimalLP = false
+local hmcUsePrimalLP = true
 local alwaysDoSmoothing = false
 local outputSmoothRender = false
 local constraintStrength = 2000
 local expandFactor = 1
 
+local doHMC = true
 
 -- local priorModule = stainedGlassModule
 -- local targetImgName = "targets/tiger_250.png"
@@ -163,8 +164,12 @@ local LARJParams = {intervals=0}
 LARJParams.doDepthBiasedSelection = priorModule.doDepthBiasedSelection
 LARJParams.jumpFreq = priorModule.jumpFreq or 0.0
 
-local kernel = LARJ(HMC(HMCParams))(LARJParams)
--- local kernel = LARJ(RandomWalk({structs=false}))(LARJParams)
+local kernel = nil
+if doHMC then
+	kernel = LARJ(HMC(HMCParams))(LARJParams)
+else
+	kernel = LARJ(RandomWalk({structs=false}))(LARJParams)
+end
 
 -------------------
 
@@ -191,12 +196,11 @@ local scheduleFunction = macro(function(iter, currTrace)
 	end
 end)
 
-local pmodule = nil
-if alwaysDoSmoothing then
-	pmodule = priorModule.codeModule(inferenceTime, true)
-else
-	pmodule = priorModule.codeModule(inferenceTime)
-end
+-- We should always use the smooth renderer if requested, or if we're doing HMC
+--   where logprobs come from the AD trace (if we don't do this, then jumps will not work well)
+local alwaysSmooth = nil
+alwaysSmooth = alwaysDoSmoothing or (doHMC and not hmcUsePrimalLP)
+local pmodule = priorModule.codeModule(inferenceTime, alwaysSmooth)
 
 constraintStrength = expandFactor*expandFactor*constraintStrength
 local targetData = loadTargetImage(pmodule().SampledFunctionType, targetImgName, expandFactor)
