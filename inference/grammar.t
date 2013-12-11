@@ -51,7 +51,7 @@ local function grammarModule(inferenceTime, doSmoothing)
 		if doSmooth == nil then doSmooth = (real == ad.num) end
 		local Vec2 = Vec(real, 2)
 		local Color1 = Color(real, 1)
-		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.Min(1.0), SfnOpts.AccumFns.Over())
+		local SampledFunctionType = SampledFunction(Vec2d, Color1, SfnOpts.ClampFns.None(), SfnOpts.AccumFns.Over())
 		local ShapeType = shapes.ImplicitShape(Vec2, Color1)
 		local Capsule = shapes.CapsuleImplicitShape(Vec2, Color1)
 		local ColoredShape = shapes.ConstantColorImplicitShape(Vec2, Color1)
