@@ -199,7 +199,9 @@ end)
 -- We should always use the smooth renderer if requested, or if we're doing HMC
 --   where logprobs come from the AD trace (if we don't do this, then jumps will not work well)
 local alwaysSmooth = nil
-alwaysSmooth = alwaysDoSmoothing or (doHMC and not hmcUsePrimalLP)
+if alwaysDoSmoothing or (doHMC and not hmcUsePrimalLP) then
+	alwaysSmooth = true
+end
 local pmodule = priorModule.codeModule(inferenceTime, alwaysSmooth)
 
 constraintStrength = expandFactor*expandFactor*constraintStrength
