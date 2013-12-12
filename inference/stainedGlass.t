@@ -54,6 +54,18 @@ local StainedGlassRetType = templatize(function(real)
 	return StainedGlassRetTypeT
 end)
 
+-- -- For testing with fixed point patterns
+-- local pointLocs = global(Vector(Vec2d))
+-- local rand = terralib.require("prob.random")
+-- local terra initPointLocs()
+-- 	pointLocs:__construct(500, Vec2d.stackAlloc())
+-- 	for i=0,pointLocs.size do
+-- 		pointLocs(i)(0) = [rand.gaussian_sample(double)](0.5, 0.25)
+-- 		pointLocs(i)(1) = [rand.gaussian_sample(double)](0.5, 0.25)
+-- 	end
+-- end
+-- initPointLocs()
+
 local function stainedGlassModule(inferenceTime, doSmoothing)
 	return function()
 		local doSmooth = doSmoothing
@@ -83,33 +95,34 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			end
 		end)
 
-		-- Constants
-		local numNeighbors = 4
-
 		-- Priors
-		-- local numPointsConcentration = 500
-		local numPointsConcentration = 50
+		local numPointsConcentration = 500
+		-- local numPointsConcentration = 50
 		local pointPosMean = 0.5
 		local pointPosSD = 0.25
+
+		-- Constants
+		local numNeighbors = 10
+		-- local numNeighbors = numPointsConcentration-1
 
 		-- The 'prior' part of the program which recursively generates a bunch of line
 		--    segments to be rendered.
 		local stainedGlass = pfn(terra()
-			var numPoints = numNeighbors + poisson(numPointsConcentration)
-			-- C.printf("%d\n", numPoints)
+			-- var numPoints = numNeighbors + poisson(numPointsConcentration)
+			var numPoints = numPointsConcentration
 			var points = [Vector(Point)].stackAlloc(numPoints, Point{})
-			-- C.printf("---------             \n")
 			for i=0,numPoints do
 				points(i).loc(0) = ngaussian(pointPosMean, pointPosSD)
 				points(i).loc(1) = ngaussian(pointPosMean, pointPosSD)
+				-- points(i).loc(0) = pointLocs(i)(0)
+				-- points(i).loc(1) = pointLocs(i)(1)
 				points(i).color(0) = nuniformClamped(0.0, 1.0)
 				points(i).color(1) = nuniformClamped(0.0, 1.0)
 				points(i).color(2) = nuniformClamped(0.0, 1.0)
-				-- C.printf("%.2f, %.2f, %.2f\n", points(i).color(0), points(i).color(1), points(i).color(2))
 			end
 
-			var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
-			-- var smoothingAmount = 1.0
+			-- var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			var smoothingAmount = 0.25
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
 
@@ -142,6 +155,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		end
 
 		-- Accelerated nearest-neighbor lookup
+		-- TODO: Something funny is happening with this version. Fix it.
 		local ffi = require("ffi")
 		local nearTree = global(CNearTree.CNearTreeHandle)
 		ffi.gc(nearTree:getpointer(), function(nt) CNearTree.CNearTreeFree(nt) end)
@@ -187,6 +201,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			CNearTree.CVectorFree(&outPointers)
 
 			-- Ensure the closest one is first (other ordering doesn't really matter)
+			-- TODO: Fully sort these.
 			var tmp = ns(0)
 			ns(0) = ns(minIndex)
 			ns(minIndex) = tmp
@@ -220,14 +235,28 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 
 		terra StainedGlassShape:isovalueAndColor(point: Vec2) : {real, Color3, real}
 
-			-- var neighbors = knnBruteForce(point, &self.points)
-			var neighbors = knnCNearTree(point)
+			var neighbors = knnBruteForce(point, &self.points)
+			-- var neighbors = knnCNearTree(point)
+
+			var dists = [Vector(real)].stackAlloc(neighbors.size, 0.0)
+			for i=0,dists.size do
+				dists(i) = point:dist(neighbors(i).loc)
+			end
 
 			-- Compute unnormalized weights via inverse distance
 			var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
 			for i=0,weights.size do
-				weights(i) = 1.0 / point:dist(neighbors(i).loc)
+				weights(i) = 1.0 / dists(i)
 			end
+
+			-- -- Compute unnormalized weights by lerped distance
+			-- var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
+			-- var minDist = dists(0)
+			-- var maxDist = dists(numNeighbors-1)
+			-- for i=0,weights.size do
+			-- 	weights(i) =  1.0 - ((dists(i) - minDist) / (maxDist - minDist))
+			-- end
+
 			var totalWeight = weights(0)
 			-- Interpolate toward zero for all weights other than the largest (using smoothing param)
 			for i=1,weights.size do
@@ -242,6 +271,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			end
 
 			m.destruct(neighbors)
+			m.destruct(dists)
 			m.destruct(weights)
 
 			return 0.0, color, 1.0
@@ -299,7 +329,8 @@ end
 return
 {
 	codeModule = stainedGlassModule,
-	jumpFreq = 0.25
+	-- jumpFreq = 0.25
+	jumpFreq = 0.0
 }
 
 

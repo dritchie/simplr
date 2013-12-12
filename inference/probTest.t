@@ -32,6 +32,8 @@ local stainedGlassModule = terralib.require("stainedGlass")
 local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
 local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
 
+local GradientAscent = terralib.require("gradientAscent")
+
 local C = terralib.includecstring [[
 #include <stdio.h>
 #include <string.h>
@@ -130,11 +132,11 @@ end
 
 ------------------
 
-local numsamps = 2000
+local numsamps = 100
 local doGlobalAnnealing = false
 local initialGlobalTemp = 10
 local doLocalErrorTempering = false
-local hmcUsePrimalLP = true
+local hmcUsePrimalLP = false
 local alwaysDoSmoothing = false
 local outputSmoothRender = false
 local constraintStrength = 2000
@@ -142,8 +144,8 @@ local expandFactor = 1
 
 local doHMC = true
 
--- local priorModule = stainedGlassModule
--- local targetImgName = "targets/tiger_250.png"
+local priorModule = stainedGlassModule
+local targetImgName = "targets/tiger_100.png"
 -- local priorModule = colorDotModule
 -- local targetImgName = "targets/red_250.png"
 -- local priorModule = particlesModule
@@ -152,8 +154,8 @@ local doHMC = true
 -- local targetImgName = "targets/bird_250.png"
 -- local priorModule = vinesModule
 -- local targetImgName = "targets/knot_250.png"
-local priorModule = grammarModule
-local targetImgName = "targets/helix_250.png"
+-- local priorModule = grammarModule
+-- local targetImgName = "targets/helix_250.png"
 -- local priorModule = polylineModule
 -- local targetImgName = "targets/squiggle_200.png"
 -- local priorModule = circlesModule
@@ -164,6 +166,7 @@ local LARJParams = {intervals=0}
 LARJParams.doDepthBiasedSelection = priorModule.doDepthBiasedSelection
 LARJParams.jumpFreq = priorModule.jumpFreq or 0.0
 
+-- local kernel = GradientAscent({stepSize=0.01})
 local kernel = nil
 if doHMC then
 	kernel = LARJ(HMC(HMCParams))(LARJParams)
