@@ -87,7 +87,7 @@ local GradientAscentKernel = templatize(function(stepSize)
 		end
 
 		[copyNonstructRealsIntoTrace(double)](&self.positions, currTrace)
-		[trace.traceUpdate{structureChange=false}](currTrace)
+		[trace.traceUpdate{structureChange=false, factorEval=false}](currTrace)
 
 		return currTrace
 	end

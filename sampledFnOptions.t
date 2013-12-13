@@ -21,7 +21,9 @@ local ChannelFns =
 				return quote [dst] = [src] / [DstTyp](intmax) end
 			elseif SrcTyp:isfloat() and DstTyp:isintegral() then
 				local intmax = 2 ^ (terralib.sizeof(DstTyp)*8) - 1
-				return quote [dst] = [DstTyp]([src] * intmax) end
+				return quote
+					[dst] = [DstTyp](ad.math.fmin(ad.math.fmax([src] * intmax, 0.0), intmax))
+				end
 			else
 				return quote [dst] = [DstTyp]([src]) end
 			end

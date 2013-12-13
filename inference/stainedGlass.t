@@ -26,7 +26,20 @@ local C = terralib.includec("stdio.h")
 
 local CNearTree = terralib.require("CNearTree")
 
+
 --------------------------------
+
+local erph = terralib.require("prob.erph")
+local random = terralib.require("prob.random")
+newERP(
+"uniformNoPrior",
+random.uniform_sample,
+erph.overloadOnParams(2, function(V, P1, P2)
+	return terra(val: V, lo: P1, hi: P2)
+		return V(0.0)
+	end
+end))
+
 
 local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
@@ -54,17 +67,19 @@ local StainedGlassRetType = templatize(function(real)
 	return StainedGlassRetTypeT
 end)
 
--- -- For testing with fixed point patterns
--- local pointLocs = global(Vector(Vec2d))
--- local rand = terralib.require("prob.random")
--- local terra initPointLocs()
--- 	pointLocs:__construct(500, Vec2d.stackAlloc())
--- 	for i=0,pointLocs.size do
--- 		pointLocs(i)(0) = [rand.gaussian_sample(double)](0.5, 0.25)
--- 		pointLocs(i)(1) = [rand.gaussian_sample(double)](0.5, 0.25)
--- 	end
--- end
--- initPointLocs()
+-- For testing with fixed point patterns
+local pointLocs = global(Vector(Vec2d))
+local rand = terralib.require("prob.random")
+local terra initPointLocs()
+	pointLocs:__construct(500, Vec2d.stackAlloc())
+	for i=0,pointLocs.size do
+		-- pointLocs(i)(0) = [rand.gaussian_sample(double)](0.5, 0.25)
+		-- pointLocs(i)(1) = [rand.gaussian_sample(double)](0.5, 0.25)
+		pointLocs(i)(0) = [rand.uniform_sample(double)](0.0, 1.0)
+		pointLocs(i)(1) = [rand.uniform_sample(double)](0.0, 1.0)
+	end
+end
+initPointLocs()
 
 local function stainedGlassModule(inferenceTime, doSmoothing)
 	return function()
@@ -84,6 +99,18 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		-- Shorthand for common non-structural ERPs
 		local ngaussian = macro(function(mean, sd)
 			return `gaussian([mean], [sd], {structural=false})
+		end)
+		local nuniformNoPrior = macro(function(lo, hi)
+			return `uniformNoPrior(lo, hi, {structural=false})
+		end)
+		local nuniformNoPriorClamped = macro(function(lo, hi)
+			return quote
+				var x = nuniformNoPrior(lo, hi)
+				-- Have to clamp, because HMC may take us out of the support range.
+				x = ad.math.fmax(ad.math.fmin(x, hi), lo)
+			in
+				x
+			end
 		end)
 		local nuniformClamped = macro(function(lo, hi)
 			return quote
@@ -112,17 +139,38 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			var numPoints = numPointsConcentration
 			var points = [Vector(Point)].stackAlloc(numPoints, Point{})
 			for i=0,numPoints do
-				points(i).loc(0) = ngaussian(pointPosMean, pointPosSD)
-				points(i).loc(1) = ngaussian(pointPosMean, pointPosSD)
-				-- points(i).loc(0) = pointLocs(i)(0)
-				-- points(i).loc(1) = pointLocs(i)(1)
-				points(i).color(0) = nuniformClamped(0.0, 1.0)
-				points(i).color(1) = nuniformClamped(0.0, 1.0)
-				points(i).color(2) = nuniformClamped(0.0, 1.0)
+				-- points(i).loc(0) = ngaussian(pointPosMean, pointPosSD)
+				-- points(i).loc(1) = ngaussian(pointPosMean, pointPosSD)
+				points(i).loc(0) = pointLocs(i)(0)
+				points(i).loc(1) = pointLocs(i)(1)
+				-- points(i).loc(0) = nuniformNoPrior(0.0, 1.0)
+				-- points(i).loc(1) = nuniformNoPrior(0.0, 1.0)
+				-- points(i).color(0) = nuniformClamped(0.0, 1.0)
+				-- points(i).color(1) = nuniformClamped(0.0, 1.0)
+				-- points(i).color(2) = nuniformClamped(0.0, 1.0)
+				-- points(i).color(0) = nuniformNoPriorClamped(0.0, 1.0)
+				-- points(i).color(1) = nuniformNoPriorClamped(0.0, 1.0)
+				-- points(i).color(2) = nuniformNoPriorClamped(0.0, 1.0)
+				points(i).color(0) = nuniformNoPrior(0.0, 1.0)
+				points(i).color(1) = nuniformNoPrior(0.0, 1.0)
+				points(i).color(2) = nuniformNoPrior(0.0, 1.0)
+				-- points(i).color(0) = ngaussian(0.5, 0.5)
+				-- points(i).color(1) = ngaussian(0.5, 0.5)
+				-- points(i).color(2) = ngaussian(0.5, 0.5)
+
+				-- C.printf("r: %.2f, g: %.2f, b: %.2f\n", ad.val(points(i).color(0)),
+				-- 										ad.val(points(i).color(1)),
+				-- 										ad.val(points(i).color(2)))
 			end
 
-			-- var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
-			var smoothingAmount = 0.25
+			-- var smoothingAmount = 0.0
+			-- if inferenceTime < 0.5 then
+			-- 	smoothingAmount = lerp(1.0, 0.0, 2.0*inferenceTime)
+			-- end
+			var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			-- var smoothingAmount = lerp(1.0, 0.0, 0.99)
+			-- var smoothingAmount = 0.25
+			-- var smoothingAmount = 0.0
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
 
@@ -243,19 +291,19 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 				dists(i) = point:dist(neighbors(i).loc)
 			end
 
-			-- Compute unnormalized weights via inverse distance
-			var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
-			for i=0,weights.size do
-				weights(i) = 1.0 / dists(i)
-			end
-
-			-- -- Compute unnormalized weights by lerped distance
+			-- -- Compute unnormalized weights via inverse distance
 			-- var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
-			-- var minDist = dists(0)
-			-- var maxDist = dists(numNeighbors-1)
 			-- for i=0,weights.size do
-			-- 	weights(i) =  1.0 - ((dists(i) - minDist) / (maxDist - minDist))
+			-- 	weights(i) = 1.0 / dists(i)
 			-- end
+
+			-- Compute unnormalized weights by lerped distance
+			var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
+			var minDist = dists(0)
+			var maxDist = dists(numNeighbors-1)
+			for i=0,weights.size do
+				weights(i) =  1.0 - ((dists(i) - minDist) / (maxDist - minDist))
+			end
 
 			var totalWeight = weights(0)
 			-- Interpolate toward zero for all weights other than the largest (using smoothing param)
