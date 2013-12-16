@@ -139,7 +139,8 @@ local doLocalErrorTempering = false
 local hmcUsePrimalLP = false
 local alwaysDoSmoothing = false
 local outputSmoothRender = true
-local constraintStrength = 2000
+local constraintStrength = 200000
+-- local constraintStrength = 2000
 local expandFactor = 1
 
 local doHMC = true
@@ -166,14 +167,14 @@ local LARJParams = {intervals=0}
 LARJParams.doDepthBiasedSelection = priorModule.doDepthBiasedSelection
 LARJParams.jumpFreq = priorModule.jumpFreq or 0.0
 
-local kernel = GradientAscent({stepSize=0.01})
+-- local kernel = GradientAscent({stepSize=0.01})
 -- local kernel = GradientAscent({stepSize=0.001})
--- local kernel = nil
--- if doHMC then
--- 	kernel = LARJ(HMC(HMCParams))(LARJParams)
--- else
--- 	kernel = LARJ(RandomWalk({structs=false}))(LARJParams)
--- end
+local kernel = nil
+if doHMC then
+	kernel = LARJ(HMC(HMCParams))(LARJParams)
+else
+	kernel = LARJ(RandomWalk({structs=false}))(LARJParams)
+end
 
 -------------------
 

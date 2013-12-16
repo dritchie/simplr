@@ -31,11 +31,25 @@ local CNearTree = terralib.require("CNearTree")
 
 local erph = terralib.require("prob.erph")
 local random = terralib.require("prob.random")
+
 newERP(
 "uniformNoPrior",
 random.uniform_sample,
 erph.overloadOnParams(2, function(V, P1, P2)
 	return terra(val: V, lo: P1, hi: P2)
+		return V(0.0)
+	end
+end))
+
+newERP(
+"identityNoPrior",
+erph.overloadOnParams(1, function(V, P)
+	return terra(x: P)
+		return V(x)
+	end
+end),
+erph.overloadOnParams(1, function(V, P)
+	return terra(val: V, x: P)
 		return V(0.0)
 	end
 end))
@@ -100,6 +114,9 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		local ngaussian = macro(function(mean, sd)
 			return `gaussian([mean], [sd], {structural=false})
 		end)
+		local nuniform = macro(function(lo, hi)
+			return `uniform(lo, hi, {structural=false})
+		end)
 		local nuniformNoPrior = macro(function(lo, hi)
 			return `uniformNoPrior(lo, hi, {structural=false})
 		end)
@@ -114,7 +131,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		end)
 		local nuniformClamped = macro(function(lo, hi)
 			return quote
-				var x = uniform(lo, hi, {structural=false})
+				var x = nuniform(lo, hi)
 				-- Have to clamp, because HMC may take us out of the support range.
 				x = ad.math.fmax(ad.math.fmin(x, hi), lo)
 			in
@@ -132,8 +149,6 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		local numNeighbors = 10
 		-- local numNeighbors = numPointsConcentration-1
 
-		-- The 'prior' part of the program which recursively generates a bunch of line
-		--    segments to be rendered.
 		local stainedGlass = pfn(terra()
 			-- var numPoints = numNeighbors + poisson(numPointsConcentration)
 			var numPoints = numPointsConcentration
@@ -141,16 +156,19 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			for i=0,numPoints do
 				-- points(i).loc(0) = ngaussian(pointPosMean, pointPosSD)
 				-- points(i).loc(1) = ngaussian(pointPosMean, pointPosSD)
-				points(i).loc(0) = pointLocs(i)(0)
-				points(i).loc(1) = pointLocs(i)(1)
-				-- points(i).loc(0) = nuniformNoPrior(0.0, 1.0)
-				-- points(i).loc(1) = nuniformNoPrior(0.0, 1.0)
+				-- points(i).loc(0) = pointLocs(i)(0)
+				-- points(i).loc(1) = pointLocs(i)(1)
+				points(i).loc(0) = nuniformNoPrior(0.0, 1.0)
+				points(i).loc(1) = nuniformNoPrior(0.0, 1.0)
 				-- points(i).color(0) = nuniformClamped(0.0, 1.0)
 				-- points(i).color(1) = nuniformClamped(0.0, 1.0)
 				-- points(i).color(2) = nuniformClamped(0.0, 1.0)
 				-- points(i).color(0) = nuniformNoPriorClamped(0.0, 1.0)
 				-- points(i).color(1) = nuniformNoPriorClamped(0.0, 1.0)
 				-- points(i).color(2) = nuniformNoPriorClamped(0.0, 1.0)
+				-- points(i).color(0) = nuniform(0.0, 1.0)
+				-- points(i).color(1) = nuniform(0.0, 1.0)
+				-- points(i).color(2) = nuniform(0.0, 1.0)
 				points(i).color(0) = nuniformNoPrior(0.0, 1.0)
 				points(i).color(1) = nuniformNoPrior(0.0, 1.0)
 				points(i).color(2) = nuniformNoPrior(0.0, 1.0)
@@ -167,24 +185,90 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			-- if inferenceTime < 0.5 then
 			-- 	smoothingAmount = lerp(1.0, 0.0, 2.0*inferenceTime)
 			-- end
-			var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			-- var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			-- var smoothingAmount = lerp(0.5, 0.0, inferenceTime)
 			-- var smoothingAmount = lerp(1.0, 0.0, 0.99)
-			-- var smoothingAmount = 0.25
+			var smoothingAmount = 0.25
+			-- var smoothingAmount = 0.1
 			-- var smoothingAmount = 0.0
 			return RetType.stackAlloc(points, smoothingAmount)
 		end)
 
+		--------------------------------------------
+
+		-- Need to use a distribution with infinite support so that HMC
+		--    can take big steps, but semantics of program dictate that some
+		--    values have strict ranges. Better to let the underyling random
+		--    variable stray outside the bounds and then clamp the value for
+		--    all subsequent uses in the program 
+		local nguassianClamped = macro(function(m, sd, lo, hi)
+			return `ad.math.fmax(ad.math.fmin(ngaussian(m, sd), hi), lo)
+		end)
+		local nidentityNoPrior = macro(function(x)
+			return `identityNoPrior(x, {structural=false})
+		end)
+
+		local maxDepth = 6
+		local splitPointMean = 0.5
+		local splitPointSD = 0.1
+		local colorSD = 0.05
+
+		local perturbColor = pfn(terra(color: Color3)
+			-- return Color3.stackAlloc(ngaussian(color(0), colorSD),
+			-- 					     ngaussian(color(1), colorSD),
+			-- 					     ngaussian(color(2), colorSD))
+			return Color3.stackAlloc(nidentityNoPrior(color(0)),
+								     nidentityNoPrior(color(1)),
+								     nidentityNoPrior(color(2)))
+		end)
+
+		-- New multi-resolution, recursive version
+		local stainedGlassRecHelper = pfn()
+		stainedGlassRecHelper:define(terra(depth: uint, color: Color3, lox: real, loy: real,
+										   hix: real, hiy: real, points: &Vector(Point)) : {}
+			-- Either recurse by splitting into four quadrants, or drop a point
+			--    somewhere in the current quadrant
+			var splitVal = nguassianClamped(splitPointMean, splitPointSD, 0.0, 1.0)
+			var splitx = lerp(lox, hix, splitVal)
+			var splity = lerp(loy, hiy, splitVal)
+			var splitProb = lerp(1.0, 0.0, depth/[double](maxDepth))
+			if flip(splitProb) then
+				stainedGlassRecHelper(depth+1, perturbColor(color), lox, loy, splitx, splity, points)
+				stainedGlassRecHelper(depth+1, perturbColor(color), splitx, loy, hix, splity, points)
+				stainedGlassRecHelper(depth+1, perturbColor(color), lox, splity, splitx, hiy, points)
+				stainedGlassRecHelper(depth+1, perturbColor(color), splitx, splity, hix, hiy, points)
+			else
+				points:push(Point{Vec2.stackAlloc(splitx, splity), color})
+			end
+		end)
+		local stainedGlassRec = pfn(terra()
+			var points = [Vector(Point)].stackAlloc()
+			var initialColor = Color3.stackAlloc(nuniformNoPrior(0.0, 1.0),
+												 nuniformNoPrior(0.0, 1.0),
+												 nuniformNoPrior(0.0, 1.0))
+			stainedGlassRecHelper(1, initialColor, 0.0, 0.0, 1.0, 1.0, &points)
+
+			-- var smoothingAmount = lerp(1.0, 0.0, inferenceTime)
+			-- var smoothingAmount = 0.0
+			var smoothingAmount = 0.1
+			return RetType.stackAlloc(points, smoothingAmount)
+		end)
+
+		--------------------------------------------
+
 		-- Brute-force nearest-neighbor lookup
 		local terra knnBruteForce(queryPoint: Vec2, points: &Vector(Point))
-			if not (points.size >= numNeighbors) then
-				util.fatalError("numNeighbors must be <= the number of points")
-			end
-			var ns = [Vector(&Point)].stackAlloc(numNeighbors, nil)
-			var nds = [Vector(real)].stackAlloc(numNeighbors, [math.huge])
+			var numNs = numNeighbors
+			if numNs > points.size then numNs = points.size end
+			-- if not (points.size >= numNeighbors) then
+			-- 	util.fatalError("numNeighbors must be <= the number of points\n")
+			-- end
+			var ns = [Vector(&Point)].stackAlloc(numNs, nil)
+			var nds = [Vector(real)].stackAlloc(numNs, [math.huge])
 			for i=0,points.size do
 				var p = points(i)
 				var dist = queryPoint:distSq(p.loc)
-				for j=0,numNeighbors do
+				for j=0,numNs do
 					if ns(j) == nil then
 						ns(j) = points:getPointer(i)
 						nds(j) = dist
@@ -192,8 +276,8 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 					elseif nds(j) > dist then
 						ns:insert(j, points:getPointer(i))
 						nds:insert(j, dist)
-						ns:resize(numNeighbors)
-						nds:resize(numNeighbors)
+						ns:resize(numNs)
+						nds:resize(numNs)
 						break
 					end
 				end
@@ -203,6 +287,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		end
 
 		-- Accelerated nearest-neighbor lookup
+		-- TODO: Deal with case where numNeighbors is greater than number of points
 		-- TODO: Something funny is happening with this version. Fix it.
 		local ffi = require("ffi")
 		local nearTree = global(CNearTree.CNearTreeHandle)
@@ -300,9 +385,11 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 			-- Compute unnormalized weights by lerped distance
 			var weights = [Vector(real)].stackAlloc(neighbors.size, 0.0)
 			var minDist = dists(0)
-			var maxDist = dists(numNeighbors-1)
+			var maxDist = dists(neighbors.size-1)
+			var range = maxDist - minDist
+			if range == 0.0 then range = 1.0 end
 			for i=0,weights.size do
-				weights(i) =  1.0 - ((dists(i) - minDist) / (maxDist - minDist))
+				weights(i) =  1.0 - ((dists(i) - minDist) / range)
 			end
 
 			var totalWeight = weights(0)
@@ -364,6 +451,7 @@ local function stainedGlassModule(inferenceTime, doSmoothing)
 		return
 		{
 			prior = stainedGlass,
+			-- prior = stainedGlassRec,
 			sampleSmooth = renderSmooth,
 			sampleSharp = renderSharp,
 			sample = (doSmooth and renderSmooth or renderSharp),
@@ -378,7 +466,7 @@ return
 {
 	codeModule = stainedGlassModule,
 	-- jumpFreq = 0.25
-	jumpFreq = 0.0
+	doDepthBiasedSelection = true
 }
 
 
