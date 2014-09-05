@@ -1,7 +1,7 @@
 simplr
 ======
 
-The Smooth Implicit Renderer -- an automatically-differentiated, implicit surface sampler/renderer written in Terra.
+The Smooth Implicit Renderer
 
 Depends on
  - [terra-utils](https://github.com/dritchie/terra-utils)
