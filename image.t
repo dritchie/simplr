@@ -1,7 +1,7 @@
-local m = terralib.require("mem")
-local templatize = terralib.require("templatize")
-local util = terralib.require("util")
-local Color = terralib.require("color")
+local m = require("mem")
+local templatize = require("templatize")
+local util = require("util")
+local Color = require("color")
 
 local FI = os.getenv("FREEIMAGE_H_PATH") and terralib.includec(os.getenv("FREEIMAGE_H_PATH")) or
 		   error("Environment variable 'FREEIMAGE_H_PATH' not defined.")

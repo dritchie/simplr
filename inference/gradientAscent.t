@@ -1,16 +1,16 @@
-local inference = terralib.require("prob.inference")
+local inference = require("prob.inference")
 local MCMCKernel = inference.MCMCKernel
-local m = terralib.require("mem")
-local ad = terralib.require("ad")
-local Vector = terralib.require("vector")
-local util = terralib.require("util")
-local inheritance = terralib.require("inheritance")
-local templatize = terralib.require("templatize")
-local trace = terralib.require("prob.trace")
+local m = require("mem")
+local ad = require("ad")
+local Vector = require("vector")
+local util = require("util")
+local inheritance = require("inheritance")
+local templatize = require("templatize")
+local trace = require("prob.trace")
 local BaseTrace = trace.BaseTrace
 local BaseTraceD = BaseTrace(double)
 local BaseTraceAD = BaseTrace(ad.num)
-local erph = terralib.require("prob.erph")
+local erph = require("prob.erph")
 local RandVar = erph.RandVar
 
 local C = terralib.includecstring [[

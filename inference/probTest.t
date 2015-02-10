@@ -1,38 +1,38 @@
 -- Include Quicksand
-terralib.require("prob")
+require("prob")
 
-local m = terralib.require("mem")
-local util = terralib.require("util")
+local m = require("mem")
+local util = require("util")
 
-local Vec = terralib.require("linalg").Vec
+local Vec = require("linalg").Vec
 local Vec2d = Vec(double, 2)
 local Vec2u = Vec(uint, 2)
 
-local Color = terralib.require("color")
+local Color = require("color")
 local Color1d = Color(double, 1)
 
-local im = terralib.require("image")
+local im = require("image")
 local RGBImage = im.Image(uint8, 3)
 
-local patterns = terralib.require("samplePatterns")
+local patterns = require("samplePatterns")
 local ImgGridPattern = patterns.RegularGridSamplingPattern(Vec2d)
 
-local SampledFunction = terralib.require("sampledFunction")
+local SampledFunction = require("sampledFunction")
 local SampledFunction2d1d = SampledFunction(Vec2d, Color1d)
 
-local circlesModule = terralib.require("circles")
-local polylineModule = terralib.require("polyline")
-local grammarModule = terralib.require("grammar")
-local vinesModule = terralib.require("vines")
-local veinsModule = terralib.require("veins")
-local particlesModule = terralib.require("particles")
-local colorDotModule = terralib.require("colorDot")
-local stainedGlassModule = terralib.require("stainedGlass")
+local circlesModule = require("circles")
+local polylineModule = require("polyline")
+local grammarModule = require("grammar")
+local vinesModule = require("vines")
+local veinsModule = require("veins")
+local particlesModule = require("particles")
+local colorDotModule = require("colorDot")
+local stainedGlassModule = require("stainedGlass")
 
-local loadTargetImage = terralib.require("targetImageLikelihood").loadTargetImage
-local mseLikelihoodModule = terralib.require("targetImageLikelihood").mseLikelihoodModule
+local loadTargetImage = require("targetImageLikelihood").loadTargetImage
+local mseLikelihoodModule = require("targetImageLikelihood").mseLikelihoodModule
 
-local GradientAscent = terralib.require("gradientAscent")
+local GradientAscent = require("gradientAscent")
 
 local C = terralib.includecstring [[
 #include <stdio.h>

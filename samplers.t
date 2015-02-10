@@ -1,9 +1,9 @@
-local m = terralib.require("mem")
-local Vector = terralib.require("vector")
-local Vec = terralib.require("linalg").Vec
-local Color = terralib.require("color")
-local templatize = terralib.require("templatize")
-local ad = terralib.require("ad")
+local m = require("mem")
+local Vector = require("vector")
+local Vec = require("linalg").Vec
+local Color = require("color")
+local templatize = require("templatize")
+local ad = require("ad")
 
 
 -- Skip sampling shapes at locations where the resulting alpha

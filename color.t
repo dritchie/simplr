@@ -1,5 +1,5 @@
-local Vec = terralib.require("linalg").Vec
-local templatize = terralib.require("templatize")
+local Vec = require("linalg").Vec
+local templatize = require("templatize")
 
 -- Alias for Vec
 return Vec

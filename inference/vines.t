@@ -1,22 +1,22 @@
 -- Include Quicksand
-terralib.require("prob")
+require("prob")
 
-local m = terralib.require("mem")
-local templatize = terralib.require("templatize")
-local ad = terralib.require("ad")
+local m = require("mem")
+local templatize = require("templatize")
+local ad = require("ad")
 
-local Vector = terralib.require("vector")
+local Vector = require("vector")
 
-local Vec = terralib.require("linalg").Vec
+local Vec = require("linalg").Vec
 local Vec2d = Vec(double, 2)
-local Color = terralib.require("color")
+local Color = require("color")
 
-local SfnOpts = terralib.require("sampledFnOptions")
-local SampledFunction = terralib.require("sampledFunction")
+local SfnOpts = require("sampledFnOptions")
+local SampledFunction = require("sampledFunction")
 
-local shapes = terralib.require("shapes")
+local shapes = require("shapes")
 
-local ImplicitSampler = terralib.require("samplers").ImplicitSampler
+local ImplicitSampler = require("samplers").ImplicitSampler
 
 --------------------------------
 

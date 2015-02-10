@@ -1,9 +1,9 @@
-local m = terralib.require("mem")
-local templatize = terralib.require("templatize")
-local inheritance = terralib.require("inheritance")
-local Vec = terralib.require("linalg").Vec
-local Vector = terralib.require("vector")
-local util = terralib.require("util")
+local m = require("mem")
+local templatize = require("templatize")
+local inheritance = require("inheritance")
+local Vec = require("linalg").Vec
+local Vector = require("vector")
+local util = require("util")
 
 
 local SamplingPattern = templatize(function(SpaceVec)

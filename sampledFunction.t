@@ -1,13 +1,13 @@
-local m = terralib.require("mem")
-local util = terralib.require("util")
-local Vector = terralib.require("vector")
-local Vec = terralib.require("linalg").Vec
-local Color = terralib.require("color")
-local templatize = terralib.require("templatize")
-local inheritance = terralib.require("inheritance")
-local patterns = terralib.require("samplePatterns")
-local options = terralib.require("sampledFnOptions")
-local BBox = terralib.require("bbox")
+local m = require("mem")
+local util = require("util")
+local Vector = require("vector")
+local Vec = require("linalg").Vec
+local Color = require("color")
+local templatize = require("templatize")
+local inheritance = require("inheritance")
+local patterns = require("samplePatterns")
+local options = require("sampledFnOptions")
+local BBox = require("bbox")
 
 
 local SampledFunction = templatize(function(SpaceVec, ColorVec, clampFn, accumFn)

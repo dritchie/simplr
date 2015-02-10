@@ -1,11 +1,11 @@
-local templatize = terralib.require("templatize")
-local m = terralib.require("mem")
-local util = terralib.require("util")
-local Vec = terralib.require("linalg").Vec
-local Color = terralib.require("color")
-local inheritance = terralib.require("inheritance")
-local BBox = terralib.require("bbox")
-local ad = terralib.require("ad")
+local templatize = require("templatize")
+local m = require("mem")
+local util = require("util")
+local Vec = require("linalg").Vec
+local Color = require("color")
+local inheritance = require("inheritance")
+local BBox = require("bbox")
+local ad = require("ad")
 
 
 -- TODO: If virtual function calls are too slow, we can handle the Shape hierarchy through

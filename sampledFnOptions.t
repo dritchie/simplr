@@ -1,5 +1,5 @@
-local ad = terralib.require("ad")
-local Color = terralib.require("Color")
+local ad = require("ad")
+local Color = require("Color")
 
 
 -- Functions that specify how to quantize/convert color channels

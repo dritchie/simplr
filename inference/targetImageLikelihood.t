@@ -1,15 +1,15 @@
-local m = terralib.require("mem")
-local util = terralib.require("util")
-local ad = terralib.require("ad")
+local m = require("mem")
+local util = require("util")
+local ad = require("ad")
 
-local im = terralib.require("image")
+local im = require("image")
 local RGBImage = im.Image(uint8, 3)
 
-local Vec = terralib.require("linalg").Vec
+local Vec = require("linalg").Vec
 local Vec2d = Vec(double, 2)
 local Vec2u = Vec(uint, 2)
 
-local patterns = terralib.require("samplePatterns")
+local patterns = require("samplePatterns")
 local ImgGridPattern = patterns.RegularGridSamplingPattern(Vec2d)
 
 ------------------------

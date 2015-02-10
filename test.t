@@ -1,35 +1,35 @@
-local m = terralib.require("mem")
+local m = require("mem")
 
-local linalg = terralib.require("linalg")
+local linalg = require("linalg")
 local Vec = linalg.Vec
 local Vec3d = linalg.Vec(double, 3)
 local Vec2d = linalg.Vec(double, 2)
 local Vec2u = linalg.Vec(uint, 2)
 local Vec3f = linalg.Vec(float, 3)
 
-local Color = terralib.require("color")
+local Color = require("color")
 local Color1d = Color(double, 1)
 local Color3d = Color(double, 3)
 
-local im = terralib.require("image")
+local im = require("image")
 local RGBImage = im.Image(uint8, 3)
 
-local patterns = terralib.require("samplePatterns")
+local patterns = require("samplePatterns")
 local ImgGridPattern = patterns.RegularGridSamplingPattern(Vec2d)
 
-local shapes = terralib.require("shapes")
+local shapes = require("shapes")
 local Shape2d1d = shapes.ImplicitShape(Vec2d, Color1d)
 local Circle2d1d = shapes.SphereImplicitShape(Vec2d, Color1d)
 local Capsule2d1d = shapes.CapsuleImplicitShape(Vec2d, Color1d)
 local ConstColorShape2d1d = shapes.ConstantColorImplicitShape(Vec2d, Color1d)
 
-local SfnOpts = terralib.require("sampledFnOptions")
-local SampledFunction = terralib.require("sampledFunction")
+local SfnOpts = require("sampledFnOptions")
+local SampledFunction = require("sampledFunction")
 -- local SampledFunction2d1d = SampledFunction(Vec2d, Color1d)
 local SampledFunction2d1d = SampledFunction(Vec2d, Color1d, SfnOpts.ClampFns.SoftMin(10, 1.0), SfnOpts.AccumFns.Over())
 local SampledImg = SampledFunction(Vec2d, Color3d)
 
-local ImplicitSampler = terralib.require("samplers").ImplicitSampler
+local ImplicitSampler = require("samplers").ImplicitSampler
 local ImplicitSampler2d1d = ImplicitSampler(SampledFunction2d1d, Shape2d1d)
 
 local C = terralib.includecstring [[

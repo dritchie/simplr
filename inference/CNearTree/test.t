@@ -1,8 +1,8 @@
-local CNearTree = terralib.require("init")
-local Vector = terralib.require("vector")
-local rand = terralib.require("prob.random")
-local util = terralib.require("util")
-local m = terralib.require("mem")
+local CNearTree = require("init")
+local Vector = require("vector")
+local rand = require("prob.random")
+local util = require("util")
+local m = require("mem")
 
 local C = terralib.includec("stdio.h")
 
